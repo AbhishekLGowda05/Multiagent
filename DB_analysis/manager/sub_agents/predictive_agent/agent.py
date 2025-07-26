@@ -42,14 +42,19 @@ def forecast_sales(query: str) -> SalesForecast:
     monthly_totals = df.groupby("month")["amount"].sum().reset_index()
 
     # ✅ Prepare regression data
-    X = np.arange(len(monthly_totals)).reshape(-1, 1)
-    y = monthly_totals["amount"].values
-    model = LinearRegression()
-    model.fit(X, y)
+    if len(monthly_totals) < 2:
+        # Not enough history for regression
+        forecast = monthly_totals["amount"].iloc[-1]
+    else:
+        X = np.arange(len(monthly_totals)).reshape(-1, 1)
+        y = monthly_totals["amount"].values
+        model = LinearRegression()
+        model.fit(X, y)
 
-    next_month_index = len(monthly_totals)
-    forecast = model.predict([[next_month_index]])[0]
-    forecast_month = (monthly_totals["month"].max() + 1).strftime("%Y-%m")
+        next_month_index = len(monthly_totals)
+        forecast = model.predict([[next_month_index]])[0]
+
+    forecast_month = (pd.Timestamp.now().to_period("M") + 1).strftime("%Y-%m")
 
     return SalesForecast(
         historical_months=[str(m) for m in monthly_totals["month"]],

@@ -21,14 +21,24 @@ root_agent = Agent(
     Always delegate the task to the appropriate agent. Use your best judgement 
     to determine which agent to delegate to.
 
-    You are responsible for delegating tasks to the following agent:
-    - sales_agent
-    
+    You are responsible for delegating tasks to specialized agents based on the
+    user's request.
 
-    You also have access to the following sub- agents:
-    - sales_agent
+    - **sales_agent**: Handles queries about sales totals, invoices, customers or
+      voucher information.
+    - **diagnostic_agent**: Compares sales or revenue between periods and
+      explains changes.
+    - **predictive_agent**: Forecasts future sales trends.
+    - **prescriptive_agent**: Recommends actions to improve sales performance.
+    - **greeting_agent**: Greets the user.
     
     """,
-    sub_agents=[sales_agent,greeting_agent,diagnostic_agent,predictive_agent],
+    sub_agents=[
+        sales_agent,
+        greeting_agent,
+        diagnostic_agent,
+        predictive_agent,
+        prescriptive_agent,
+    ],
     
 )
