@@ -23,11 +23,17 @@ root_agent = Agent(
 
     You are responsible for delegating tasks to the following agent:
     - sales_agent
-    
+    -greeting_agent
+    -diagnostic_agent
+    -predictive_agent
 
     You also have access to the following sub- agents:
     - sales_agent
-    
+    -greeting_agent
+    -diagnostic_agent
+    -predictive_agent
+
+    in case the relevant agent is not found delegate back to the root agent and check for the subagents available for tasks again
     """,
     sub_agents=[sales_agent,greeting_agent,diagnostic_agent,predictive_agent],
     
