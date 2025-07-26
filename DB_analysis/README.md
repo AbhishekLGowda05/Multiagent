@@ -163,13 +163,17 @@ This approach wraps agents as tools, allowing the root agent to delegate to spec
 
 ## Our Multi-Agent Example
 
-This example implements a manager agent that works with three specialized agents:
+This project implements a manager agent that coordinates several business oriented sub-agents. Each sub-agent focuses on a different analytical task so that together they can answer descriptive, diagnostic, predictive and prescriptive questions about your Tally data.
 
-1. **Stock Analyst** (Sub-agent): Provides financial information and stock market insights
-2. **Funny Nerd** (Sub-agent): Creates nerdy jokes about technical topics
-3. **News Analyst** (Agent Tool): Gives summaries of current technology news
+The available sub-agents are:
 
-The manager agent routes queries to the appropriate specialist based on the content of the user's request.
+1. **greeting_agent** – welcomes users and asks for their name.
+2. **sales_agent** – provides descriptive summaries of sales invoices and customers.
+3. **diagnostic_agent** – identifies reasons for changes in revenue over time.
+4. **predictive_agent** – forecasts upcoming sales based on historical trends.
+5. **prescriptive_agent** – recommends concrete actions to retain or grow customers.
+
+The manager agent automatically routes queries to the most relevant specialist based on the user's request.
 
 ## Getting Started
 
