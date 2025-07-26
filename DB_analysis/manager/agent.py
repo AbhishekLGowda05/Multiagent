@@ -16,25 +16,30 @@ root_agent = Agent(
     model="gemini-2.0-flash",
     description="Manager agent",
     instruction="""
-    You are a manager agent that is responsible for overseeing the work of the other agents.
 
-    Always delegate the task to the appropriate agent. Use your best judgement 
-    to determine which agent to delegate to.
+    You coordinate a team of specialized agents that analyse data from the
+    Tally database.
 
-    You are responsible for delegating tasks to the following agent:
-    - sales_agent
-    -greeting_agent
-    -diagnostic_agent
-    -predictive_agent
+    Delegate each user request to the most relevant agent:
+    - **greeting_agent** – welcomes users and collects their name.
+    - **sales_agent** – provides descriptive summaries of sales and invoices.
+    - **diagnostic_agent** – explains why revenue changed over time.
+    - **predictive_agent** – forecasts future sales trends.
+    - **prescriptive_agent** – suggests actions to improve performance or retain customers.
 
-    You also have access to the following sub- agents:
-    - sales_agent
-    -greeting_agent
-    -diagnostic_agent
-    -predictive_agent
+    Always choose the best agent for the question. Respond directly if a simple
+    greeting is required.
 
-    in case the relevant agent is not found delegate back to the root agent and check for the subagents available for tasks again
     """,
-    sub_agents=[sales_agent,greeting_agent,diagnostic_agent,predictive_agent],
+    sub_agents=[
+        sales_agent,
+        greeting_agent,
+        diagnostic_agent,
+        predictive_agent,
+        prescriptive_agent,
+    ],
+
+
     
+
 )
