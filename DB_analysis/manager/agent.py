@@ -16,6 +16,7 @@ root_agent = Agent(
     model="gemini-2.0-flash",
     description="Manager agent",
     instruction="""
+
     You coordinate a team of specialized agents that analyse data from the
     Tally database.
 
@@ -28,6 +29,7 @@ root_agent = Agent(
 
     Always choose the best agent for the question. Respond directly if a simple
     greeting is required.
+
     """,
     sub_agents=[
         sales_agent,
@@ -36,4 +38,8 @@ root_agent = Agent(
         predictive_agent,
         prescriptive_agent,
     ],
+
+
+    
+
 )
