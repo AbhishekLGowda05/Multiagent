@@ -1,0 +1,10 @@
+google-adk
+pandas
+numpy
+matplotlib
+scikit-learn
+python-dotenv
+pydantic
+
+
+
