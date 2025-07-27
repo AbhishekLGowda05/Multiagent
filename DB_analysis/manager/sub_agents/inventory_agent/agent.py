@@ -11,10 +11,10 @@ class InventorySummary(BaseModel):
     top_items_quantity: list
     top_items_value: list
 
-
 def get_inventory_summary(query: str) -> InventorySummary:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
     sql = """
     SELECT item, SUM(quantity) AS qty, SUM(amount) AS amount
     FROM trn_inventory
@@ -27,11 +27,12 @@ def get_inventory_summary(query: str) -> InventorySummary:
         return InventorySummary(
             total_unique_items=0,
             top_items_quantity=[],
-            top_items_value=[],
+            top_items_value=[]
         )
 
     df = pd.DataFrame(rows, columns=["item", "quantity", "amount"])
     total_unique_items = len(df)
+
     top_items_quantity = (
         df.sort_values("quantity", ascending=False)
         .head(5)[["item", "quantity"]]
@@ -49,11 +50,10 @@ def get_inventory_summary(query: str) -> InventorySummary:
         top_items_value=[(i, float(v)) for i, v in top_items_value],
     )
 
-
 inventory_agent = Agent(
     name="inventory_agent",
     model="gemini-2.0-flash",
-    description="Summarizes inventory levels and stock values from the Tally DB.",
+    description="Summarizes inventory stock levels and values from the Tally DB.",
     tools=[get_inventory_summary],
-    instruction="Use this agent for inventory level and stock value questions.",
+    instruction="Use this agent for questions about stock levels or inventory status.",
 )

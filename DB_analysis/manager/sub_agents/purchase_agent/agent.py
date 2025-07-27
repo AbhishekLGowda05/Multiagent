@@ -11,14 +11,16 @@ class PurchaseSummary(BaseModel):
     top_suppliers: list
     voucher_types: list
 
-
 def get_purchase_summary(query: str) -> PurchaseSummary:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
     sql = """
     SELECT party_name, voucher_type, date
     FROM trn_voucher
-    WHERE voucher_type LIKE '%Purchase%';
+    WHERE voucher_type LIKE '%Purchase%'
+    LIMIT 100;
+
     """
     rows = cursor.execute(sql).fetchall()
     conn.close()
@@ -37,11 +39,11 @@ def get_purchase_summary(query: str) -> PurchaseSummary:
         voucher_types=list(voucher_types.items()),
     )
 
-
 purchase_agent = Agent(
     name="purchase_agent",
     model="gemini-2.0-flash",
-    description="Handles purchase queries about suppliers and purchase invoices.",
+    description="Handles queries about purchase invoices and suppliers.",
     tools=[get_purchase_summary],
-    instruction="Use this agent for questions about purchases, suppliers or purchase invoices.",
+    instruction="Whenever a user asks about purchases or suppliers, call this agent.",
+
 )
