@@ -7,15 +7,16 @@ from google.adk.agents import Agent
 DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../tallydb.db"))
 
 class InventorySummary(BaseModel):
-    total_items: int
-    top_items: list
+    total_unique_items: int
+    top_items_quantity: list
+    top_items_value: list
 
-def get_inventory_overview(query: str) -> InventorySummary:
+def get_inventory_summary(query: str) -> InventorySummary:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     sql = """
-    SELECT item, SUM(quantity) as qty
+    SELECT item, SUM(quantity) AS qty, SUM(amount) AS amount
     FROM trn_inventory
     GROUP BY item;
     """
@@ -23,26 +24,36 @@ def get_inventory_overview(query: str) -> InventorySummary:
     conn.close()
 
     if not rows:
-        return InventorySummary(total_items=0, top_items=[])
+        return InventorySummary(
+            total_unique_items=0,
+            top_items_quantity=[],
+            top_items_value=[]
+        )
 
-    df = pd.DataFrame(rows, columns=["item", "quantity"])
-    total_items = df.shape[0]
-    top_items = (
+    df = pd.DataFrame(rows, columns=["item", "quantity", "amount"])
+    total_unique_items = len(df)
+
+    top_items_quantity = (
         df.sort_values("quantity", ascending=False)
-        .head(5)
-        .set_index("item")["quantity"]
-        .to_dict()
+        .head(5)[["item", "quantity"]]
+        .values.tolist()
+    )
+    top_items_value = (
+        df.sort_values("amount", ascending=False)
+        .head(5)[["item", "amount"]]
+        .values.tolist()
     )
 
     return InventorySummary(
-        total_items=int(total_items),
-        top_items=list(top_items.items()),
+        total_unique_items=total_unique_items,
+        top_items_quantity=[(i, float(q)) for i, q in top_items_quantity],
+        top_items_value=[(i, float(v)) for i, v in top_items_value],
     )
 
 inventory_agent = Agent(
     name="inventory_agent",
     model="gemini-2.0-flash",
-    description="Provides stock levels and inventory summaries.",
-    tools=[get_inventory_overview],
+    description="Summarizes inventory stock levels and values from the Tally DB.",
+    tools=[get_inventory_summary],
     instruction="Use this agent for questions about stock levels or inventory status.",
 )

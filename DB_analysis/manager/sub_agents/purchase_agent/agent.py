@@ -20,6 +20,7 @@ def get_purchase_summary(query: str) -> PurchaseSummary:
     FROM trn_voucher
     WHERE voucher_type LIKE '%Purchase%'
     LIMIT 100;
+
     """
     rows = cursor.execute(sql).fetchall()
     conn.close()
@@ -44,4 +45,5 @@ purchase_agent = Agent(
     description="Handles queries about purchase invoices and suppliers.",
     tools=[get_purchase_summary],
     instruction="Whenever a user asks about purchases or suppliers, call this agent.",
+
 )
