@@ -167,11 +167,11 @@ This project implements a manager agent that coordinates several business orient
 
 The available sub-agents are:
 
-1. **greeting_agent** – welcomes users and asks for their name.
-2. **sales_agent** – provides descriptive summaries of sales invoices and customers.
-3. **diagnostic_agent** – identifies reasons for changes in revenue over time.
-4. **predictive_agent** – forecasts upcoming sales based on historical trends.
-5. **prescriptive_agent** – recommends concrete actions to retain or grow customers.
+1. **greeting_agent** – Handles salutations, introductions, and casual conversation.
+2. **sales_agent** – Provides descriptive summaries of sales invoices, customers, and revenue from the Tally database.
+3. **diagnostic_agent** – Identifies reasons for changes in sales or revenue across time.
+4. **predictive_agent** – Forecasts upcoming sales and trends using historical data.
+5. **prescriptive_agent** – Suggests concrete actions to improve performance or retain/grow customers based on insights.
 
 The manager agent automatically routes queries to the most relevant specialist based on the user's request.
 
@@ -219,10 +219,11 @@ If your multi-agent setup doesn't appear properly in the dropdown menu:
 
 ### Example Prompts to Try
 
-- "Can you tell me about the stock market today?"
-- "Tell me something funny about programming"
-- "What's the latest tech news?"
-- "What time is it right now?"
+- "Hi there!"
+- "Summarize our latest sales invoices."
+- "Why did revenue drop in the last quarter?"
+- "Forecast sales for next month."
+- "What actions can we take to retain customers?"
 
 You can exit the conversation or stop the server by pressing `Ctrl+C` in your terminal.
 
