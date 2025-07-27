@@ -20,7 +20,6 @@ def get_purchase_summary(query: str) -> PurchaseSummary:
     FROM trn_voucher
     WHERE voucher_type LIKE '%Purchase%'
     LIMIT 100;
-
     """
     rows = cursor.execute(sql).fetchall()
     conn.close()
@@ -42,8 +41,7 @@ def get_purchase_summary(query: str) -> PurchaseSummary:
 purchase_agent = Agent(
     name="purchase_agent",
     model="gemini-2.0-flash",
-    description="Handles queries about purchase invoices and suppliers.",
+    description="Handles purchase-related queries and summarizes purchase invoices and suppliers from the Tally DB.",
     tools=[get_purchase_summary],
-    instruction="Whenever a user asks about purchases or suppliers, call this agent.",
-
+    instruction="Use this agent for questions about purchases, suppliers, or vendor invoices.",
 )

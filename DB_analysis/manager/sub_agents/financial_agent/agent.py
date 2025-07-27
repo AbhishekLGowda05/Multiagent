@@ -62,7 +62,7 @@ def get_financial_summary(query: str) -> FinancialSummary:
 financial_agent = Agent(
     name="financial_agent",
     model="gemini-2.0-flash",
-    description="Summarizes income, expenses, and top ledgers from the Tally DB.",
+    description="Handles financial queries and summarizes income, expenses, and top ledgers from the Tally DB.",
     tools=[get_financial_summary],
     instruction="Use this agent for financial or accounting queries.",
 )

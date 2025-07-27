@@ -53,7 +53,7 @@ def get_inventory_summary(query: str) -> InventorySummary:
 inventory_agent = Agent(
     name="inventory_agent",
     model="gemini-2.0-flash",
-    description="Summarizes inventory stock levels and values from the Tally DB.",
+    description="Handles inventory-related queries and summarizes stock levels and values from the Tally DB.",
     tools=[get_inventory_summary],
-    instruction="Use this agent for questions about stock levels or inventory status.",
+    instruction="Use this agent for questions about inventory levels and stock status.",
 )
