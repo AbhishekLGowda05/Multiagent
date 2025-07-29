@@ -9,6 +9,7 @@ DB_PATH = os.environ.get(
     os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../../../tallydb.db")
     ),
+
 )
 
 class PurchaseSummary(BaseModel):
