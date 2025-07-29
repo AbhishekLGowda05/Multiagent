@@ -22,17 +22,16 @@ class SalesTrend(BaseModel):
 
 
 def get_sales_summary(query: str) -> SalesSummary:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    sql = """
-    SELECT party_name, voucher_type, date 
-    FROM trn_voucher
-    WHERE voucher_type LIKE '%Sales%'
-    LIMIT 100;
-    """
-    rows = cursor.execute(sql).fetchall()
-    conn.close()
+        sql = """
+        SELECT party_name, voucher_type, date
+        FROM trn_voucher
+        WHERE voucher_type LIKE '%Sales%'
+        LIMIT 100;
+        """
+        rows = cursor.execute(sql).fetchall()
 
     if not rows:
         return SalesSummary(total_invoices=0, top_customers=[], voucher_types=[])
