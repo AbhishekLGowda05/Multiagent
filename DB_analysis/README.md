@@ -90,6 +90,7 @@ root_agent = Agent(
     ],
 )
 ```
+Here `get_current_time` is a small helper that returns the current UTC time in ISO 8601 format. Import it from `manager` and include it in your agent's tools when you need the current timestamp for forecasting future periods.
 
 **Characteristics:**
 - Sub-agent returns results to the root agent
