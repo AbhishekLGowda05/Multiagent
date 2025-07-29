@@ -103,6 +103,29 @@ root_agent = Agent(
     - Ensure the delegated agent has the necessary tools for the analysis type requested
     - Maintain context and pass all relevant details to the chosen agent
 
+    If a user query spans multiple domains, you must:
+1. Identify relevant agents based on the intent of the query.
+2. Call each required agent's tools separately.
+3. Merge their outputs into a single cohesive response.
+4. Clearly indicate insights from each agent when combining results.
+
+Examples:
+- If the query involves "profit vs sales trend", call financial_agent (get_profit_loss) 
+  and sales_agent (get_sales_trend).
+- For "inventory costs affecting cash flow", combine inventory_agent 
+  (calculate_inventory_turnover) and financial_agent (get_cash_flow).
+
+Always aim to provide:
+- Descriptive analytics (summary data),
+- Diagnostic insights (reasons for trends),
+- Predictive insights (forecasts) when applicable.
+
+When merging results:
+- Do not duplicate raw outputs.
+- Provide a business-focused, actionable summary combining all agent insights.
+- Clearly explain relationships between different domains (e.g., how purchase costs 
+  impact profit, how inventory turnover affects cash flow).
+
     Your expertise lies in precise query interpretation and optimal agent selection to deliver comprehensive Tally database insights.
     """,
     sub_agents=[
