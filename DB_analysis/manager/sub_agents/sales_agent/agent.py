@@ -5,8 +5,13 @@ import numpy as np
 from pydantic import BaseModel
 from google.adk.agents import Agent
 
+# Allow the Tally database path to be configured via environment variable.
+# If the variable isn't set, fall back to the repository's default database file.
 DB_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../../../tallydb.db")
+    os.environ.get(
+        "TALLY_DB_PATH",
+        os.path.join(os.path.dirname(__file__), "../../../../tallydb.db"),
+    )
 )
 
 
