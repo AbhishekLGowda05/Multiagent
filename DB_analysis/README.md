@@ -228,6 +228,17 @@ If your multi-agent setup doesn't appear properly in the dropdown menu:
 
 You can exit the conversation or stop the server by pressing `Ctrl+C` in your terminal.
 
+## Standalone Financial Test
+
+For quick experimentation outside the web UI, run `financial_test.py`. The script uses
+`parse_finance_query` from `manager.utils` to decide whether to call
+`get_financial_summary` or `analyze_expense_variance`.
+
+```bash
+python financial_test.py "Show variance in expenses"
+```
+
+
 ## Additional Resources
 
 - [ADK Multi-Agent Systems Documentation](https://google.github.io/adk-docs/agents/multi-agent-systems/)
