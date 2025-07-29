@@ -216,6 +216,10 @@ source ../.venv/bin/activate
    - Optionally set `GOOGLE_GENAI_USE_VERTEXAI` if you use Vertex AI (default `FALSE`)
    - Agents read data from `tallydb.db` in the project root; update the `DB_PATH` constant in each sub-agent if your database lives elsewhere
 
+3. (Optional) Define the `TALLY_DB_PATH` environment variable if your Tally
+   database is stored elsewhere. When not set, each agent defaults to the
+   `tallydb.db` file included in the project root.
+
 ## Running the Example
 
 To run the multi-agent example:
