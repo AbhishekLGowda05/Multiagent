@@ -13,15 +13,14 @@ class FinancialSummary(BaseModel):
     top_expense_ledgers: list
 
 def get_financial_summary(query: str) -> FinancialSummary:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    sql = """
-    SELECT ledger, amount
-    FROM trn_accounting;
-    """
-    rows = cursor.execute(sql).fetchall()
-    conn.close()
+        sql = """
+        SELECT ledger, amount
+        FROM trn_accounting;
+        """
+        rows = cursor.execute(sql).fetchall()
 
     if not rows:
         return FinancialSummary(

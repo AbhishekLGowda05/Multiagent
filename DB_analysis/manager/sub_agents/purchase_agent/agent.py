@@ -12,17 +12,16 @@ class PurchaseSummary(BaseModel):
     voucher_types: list
 
 def get_purchase_summary(query: str) -> PurchaseSummary:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    sql = """
-    SELECT party_name, voucher_type, date
-    FROM trn_voucher
-    WHERE voucher_type LIKE '%Purchase%'
-    LIMIT 100;
-    """
-    rows = cursor.execute(sql).fetchall()
-    conn.close()
+        sql = """
+        SELECT party_name, voucher_type, date
+        FROM trn_voucher
+        WHERE voucher_type LIKE '%Purchase%'
+        LIMIT 100;
+        """
+        rows = cursor.execute(sql).fetchall()
 
     if not rows:
         return PurchaseSummary(total_invoices=0, top_suppliers=[], voucher_types=[])

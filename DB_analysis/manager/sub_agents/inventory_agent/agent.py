@@ -12,16 +12,15 @@ class InventorySummary(BaseModel):
     top_items_value: list
 
 def get_inventory_summary(query: str) -> InventorySummary:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
 
-    sql = """
-    SELECT item, SUM(quantity) AS qty, SUM(amount) AS amount
-    FROM trn_inventory
-    GROUP BY item;
-    """
-    rows = cursor.execute(sql).fetchall()
-    conn.close()
+        sql = """
+        SELECT item, SUM(quantity) AS qty, SUM(amount) AS amount
+        FROM trn_inventory
+        GROUP BY item;
+        """
+        rows = cursor.execute(sql).fetchall()
 
     if not rows:
         return InventorySummary(
