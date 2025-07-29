@@ -194,6 +194,10 @@ source ../.venv/bin/activate
    - Rename `.env.example` to `.env` in the manager folder
    - Add your Google API key to the `GOOGLE_API_KEY` variable in the `.env` file
 
+3. (Optional) Define the `TALLY_DB_PATH` environment variable if your Tally
+   database is stored elsewhere. When not set, each agent defaults to the
+   `tallydb.db` file included in the project root.
+
 ## Running the Example
 
 To run the multi-agent example:

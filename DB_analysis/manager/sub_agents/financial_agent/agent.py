@@ -5,8 +5,11 @@ import numpy as np
 from pydantic import BaseModel
 from google.adk.agents import Agent
 
-DB_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../../../tallydb.db")
+DB_PATH = os.environ.get(
+    "TALLY_DB_PATH",
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../tallydb.db")
+    ),
 )
 
 
