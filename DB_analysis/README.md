@@ -163,15 +163,15 @@ This approach wraps agents as tools, allowing the root agent to delegate to spec
 
 ## Our Multi-Agent Example
 
-This project implements a manager agent that coordinates several business oriented sub-agents. Each sub-agent focuses on a different analytical task so that together they can answer descriptive, diagnostic, predictive and prescriptive questions about your Tally data.
+This project implements a manager agent that coordinates several business oriented sub-agents. These specialists provide targeted summaries of sales, purchases, inventory and overall financials from your Tally database.
 
 The available sub-agents are:
 
 1. **greeting_agent** – Handles salutations, introductions, and casual conversation.
 2. **sales_agent** – Provides descriptive summaries of sales invoices, customers, and revenue from the Tally database.
-3. **diagnostic_agent** – Identifies reasons for changes in sales or revenue across time.
-4. **predictive_agent** – Forecasts upcoming sales and trends using historical data.
-5. **prescriptive_agent** – Suggests concrete actions to improve performance or retain/grow customers based on insights.
+3. **purchase_agent** – Summarizes purchase invoices, suppliers, and related expenses.
+4. **inventory_agent** – Reports on stock levels and popular items in inventory.
+5. **financial_agent** – Gives overall ledger balances and other accounting totals.
 
 The manager agent automatically routes queries to the most relevant specialist based on the user's request.
 
