@@ -5,6 +5,4 @@ matplotlib
 scikit-learn
 python-dotenv
 pydantic
-
-
-
+pytest
