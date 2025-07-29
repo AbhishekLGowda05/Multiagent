@@ -1,7 +1,7 @@
 import sqlite3
 import os
-import pandas as pd
 from pydantic import BaseModel
+from statistics import pvariance
 from google.adk.agents import Agent
 
 
@@ -70,49 +70,47 @@ def get_financial_summary(query: str) -> FinancialSummary:
             top_expense_ledgers=[],
         )
 
-    df = pd.DataFrame(rows, columns=["ledger", "amount"])
-    income = df[df["amount"] > 0]
-    expense = df[df["amount"] < 0]
+    totals = {}
+    income_totals = {}
+    expense_totals = {}
+    for ledger, amt in rows:
+        totals[ledger] = totals.get(ledger, 0.0) + amt
+        if amt > 0:
+            income_totals[ledger] = income_totals.get(ledger, 0.0) + amt
+        elif amt < 0:
+            expense_totals[ledger] = expense_totals.get(ledger, 0.0) + abs(amt)
 
-    total_debit = income["amount"].sum()
-    total_credit = abs(expense["amount"].sum())
+    total_debit = sum(income_totals.values())
+    total_credit = sum(expense_totals.values())
 
-    top_income_ledgers = (
-        income.groupby("ledger")["amount"]
-        .sum()
-        .sort_values(ascending=False)
-        .head(5)
-        .to_dict()
-    )
-    top_expense_ledgers = (
-        expense.groupby("ledger")["amount"]
-        .sum()
-        .abs()
-        .sort_values(ascending=False)
-        .head(5)
-        .to_dict()
-    )
+    top_income_ledgers = sorted(
+        income_totals.items(), key=lambda x: x[1], reverse=True
+    )[:5]
+    top_expense_ledgers = sorted(
+        expense_totals.items(), key=lambda x: x[1], reverse=True
+    )[:5]
 
     return FinancialSummary(
         total_debit=round(float(total_debit), 2),
         total_credit=round(float(total_credit), 2),
-        top_income_ledgers=list(top_income_ledgers.items()),
-        top_expense_ledgers=list(top_expense_ledgers.items()),
+        top_income_ledgers=top_income_ledgers,
+        top_expense_ledgers=top_expense_ledgers,
     )
 
 
 def analyze_expense_variance(query: str) -> ExpenseVariance:
-    conn = sqlite3.connect(DB_PATH)
-    sql = "SELECT amount FROM trn_accounting WHERE amount < 0;"
-    df = pd.read_sql_query(sql, conn)
-    conn.close()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            "SELECT amount FROM trn_accounting WHERE amount < 0;"
+        ).fetchall()
 
-    if df.empty:
+    amounts = [abs(r[0]) for r in rows]
+    if not amounts:
         return ExpenseVariance(variance=0.0)
 
-    df["amount"] = df["amount"].abs()
-    variance = float(df["amount"].var())
-    return ExpenseVariance(variance=round(variance, 2))
+    variance = pvariance(amounts)
+    return ExpenseVariance(variance=round(float(variance), 2))
 
 
 def get_account_balance(query: str) -> AccountBalance:
@@ -124,9 +122,8 @@ def get_account_balance(query: str) -> AccountBalance:
     if not rows:
         return AccountBalance(total_debit=0.0, total_credit=0.0, net_balance=0.0)
 
-    df = pd.DataFrame(rows, columns=["amount"])
-    total_debit = df[df["amount"] > 0]["amount"].sum()
-    total_credit = df[df["amount"] < 0]["amount"].abs().sum()
+    total_debit = sum(a for (a,) in rows if a > 0)
+    total_credit = sum(-a for (a,) in rows if a < 0)
     balance = total_debit - total_credit
     return AccountBalance(
         total_debit=round(float(total_debit), 2),
@@ -144,9 +141,8 @@ def get_cash_flow(query: str) -> CashFlow:
     if not rows:
         return CashFlow(total_inflow=0.0, total_outflow=0.0)
 
-    df = pd.DataFrame(rows, columns=["amount"])
-    inflow = df[df["amount"] > 0]["amount"].sum()
-    outflow = df[df["amount"] < 0]["amount"].abs().sum()
+    inflow = sum(a for (a,) in rows if a > 0)
+    outflow = sum(-a for (a,) in rows if a < 0)
 
     return CashFlow(
         total_inflow=round(float(inflow), 2),
@@ -190,14 +186,14 @@ def get_ledger_summary(query: str) -> LedgerSummary:
         "LIMIT 5;"
     )
     with sqlite3.connect(DB_PATH) as conn:
-        df = pd.read_sql_query(sql, conn)
+        cursor = conn.cursor()
+        rows = cursor.execute(sql).fetchall()
 
-    if df.empty:
+    if not rows:
         return LedgerSummary(top_ledgers=[])
 
     top_ledgers = [
-        (row["ledger"], round(float(row["balance"]), 2))
-        for _, row in df.iterrows()
+        (ledger, round(float(balance), 2)) for ledger, balance in rows
     ]
     return LedgerSummary(top_ledgers=top_ledgers)
 
