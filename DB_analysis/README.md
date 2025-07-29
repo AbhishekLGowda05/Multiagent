@@ -266,6 +266,16 @@ For quick experimentation outside the web UI, run `financial_test.py`. The scrip
 python financial_test.py "Show variance in expenses"
 ```
 
+## Cross-Agent Orchestrator Example
+
+`CrossAgentOrchestrator` demonstrates how a single query can trigger
+multiple agents when it spans domains. Run `cross_agent_example.py` to
+see the orchestrator combine results from different agents:
+
+```bash
+python cross_agent_example.py "Why did our profit drop if sales are stable?"
+```
+
 
 ## Additional Resources
 
