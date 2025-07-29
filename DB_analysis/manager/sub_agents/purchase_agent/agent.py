@@ -1,6 +1,6 @@
 import sqlite3
 import os
-import pandas as pd
+
 from pydantic import BaseModel
 from google.adk.agents import Agent
 
@@ -17,6 +17,15 @@ class PurchaseSummary(BaseModel):
     top_suppliers: list
     voucher_types: list
 
+
+class PurchaseTrend(BaseModel):
+    monthly_purchases: list
+    slope: float
+
+
+class TopPurchasedItems(BaseModel):
+    top_items: list
+
 def get_purchase_summary(query: str) -> PurchaseSummary:
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
@@ -32,21 +41,85 @@ def get_purchase_summary(query: str) -> PurchaseSummary:
     if not rows:
         return PurchaseSummary(total_invoices=0, top_suppliers=[], voucher_types=[])
 
-    df = pd.DataFrame(rows, columns=["party_name", "voucher_type", "date"])
-    total_invoices = len(df)
-    top_suppliers = df["party_name"].value_counts().head(5).to_dict()
-    voucher_types = df["voucher_type"].value_counts().to_dict()
+    total_invoices = len(rows)
+    supplier_counts = {}
+    voucher_counts = {}
+    for party, vtype, _ in rows:
+        supplier_counts[party] = supplier_counts.get(party, 0) + 1
+        voucher_counts[vtype] = voucher_counts.get(vtype, 0) + 1
+
+    top_suppliers = sorted(
+        supplier_counts.items(), key=lambda x: x[1], reverse=True
+    )[:5]
+    voucher_types = sorted(
+        voucher_counts.items(), key=lambda x: x[1], reverse=True
+    )
 
     return PurchaseSummary(
         total_invoices=total_invoices,
-        top_suppliers=list(top_suppliers.items()),
-        voucher_types=list(voucher_types.items()),
+        top_suppliers=top_suppliers,
+        voucher_types=voucher_types,
     )
+
+
+def get_purchase_trend(query: str) -> PurchaseTrend:
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            """
+    SELECT strftime('%Y-%m', v.date) AS month, SUM(i.amount) AS total
+    FROM trn_voucher v
+    JOIN trn_inventory i ON v.guid = i.guid
+    WHERE v.voucher_type LIKE '%Purchase%'
+    GROUP BY month
+    ORDER BY month;
+            """
+        ).fetchall()
+
+    if not rows:
+        return PurchaseTrend(monthly_purchases=[], slope=0.0)
+
+    totals = [row[1] for row in rows]
+    n = len(totals)
+    x = list(range(n))
+    x_mean = sum(x) / n
+    y_mean = sum(totals) / n
+    num = sum((x[i] - x_mean) * (totals[i] - y_mean) for i in range(n))
+    den = sum((x[i] - x_mean) ** 2 for i in range(n))
+    slope = num / den if den != 0 else 0.0
+    monthly_purchases = [(m, float(t)) for m, t in rows]
+    return PurchaseTrend(monthly_purchases=monthly_purchases, slope=round(slope, 2))
+
+
+def get_top_items_purchased(query: str) -> TopPurchasedItems:
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            """
+    SELECT i.item, SUM(i.quantity) AS qty
+    FROM trn_inventory i
+    JOIN trn_voucher v ON i.guid = v.guid
+    WHERE v.voucher_type LIKE '%Purchase%'
+    GROUP BY i.item
+    ORDER BY qty DESC
+    LIMIT 5;
+            """
+        ).fetchall()
+
+    if not rows:
+        return TopPurchasedItems(top_items=[])
+
+    top_items = [(item, float(qty)) for item, qty in rows]
+    return TopPurchasedItems(top_items=top_items)
 
 purchase_agent = Agent(
     name="purchase_agent",
     model="gemini-2.0-flash",
     description="Handles purchase-related queries and summarizes purchase invoices and suppliers from the Tally DB.",
-    tools=[get_purchase_summary],
+    tools=[
+        get_purchase_summary,
+        get_purchase_trend,
+        get_top_items_purchased,
+    ],
     instruction="Use this agent for questions about purchases, suppliers, or vendor invoices.",
 )

@@ -1,3 +1,34 @@
+__test__ = False
+
+import sys
+import os
+import types
+
+google_module = types.ModuleType("google")
+adk_module = types.ModuleType("google.adk")
+agents_module = types.ModuleType("google.adk.agents")
+
+class DummyAgent:
+    def __init__(self, *args, **kwargs):
+        pass
+
+agents_module.Agent = DummyAgent
+adk_module.agents = agents_module
+google_module.adk = adk_module
+
+sys.modules.setdefault("google", google_module)
+sys.modules.setdefault("google.adk", adk_module)
+sys.modules.setdefault("google.adk.agents", agents_module)
+sys.path.insert(0, os.path.abspath("DB_analysis"))
+
+pydantic_module = types.ModuleType("pydantic")
+pydantic_module.BaseModel = type(
+    "BaseModel",
+    (),
+    {"__init__": lambda self, **kw: [setattr(self, k, v) for k, v in kw.items()] and None},
+)
+sys.modules.setdefault("pydantic", pydantic_module)
+
 from DB_analysis.manager.sub_agents.financial_agent.agent import (
     get_financial_summary,
     analyze_expense_variance,

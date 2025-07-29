@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath("DB_analysis"))
 google_module = types.ModuleType("google")
 adk_module = types.ModuleType("google.adk")
 agents_module = types.ModuleType("google.adk.agents")
+pydantic_module = types.ModuleType("pydantic")
 
 class DummyAgent:
     def __init__(self, *args, **kwargs):
@@ -21,10 +22,18 @@ class DummyAgent:
 agents_module.Agent = DummyAgent
 adk_module.agents = agents_module
 google_module.adk = adk_module
+pydantic_module.BaseModel = type(
+    "BaseModel",
+    (),
+    {
+        "__init__": lambda self, **kw: [setattr(self, k, v) for k, v in kw.items()] and None,
+    },
+)
 
 sys.modules.setdefault("google", google_module)
 sys.modules.setdefault("google.adk", adk_module)
 sys.modules.setdefault("google.adk.agents", agents_module)
+sys.modules.setdefault("pydantic", pydantic_module)
 
 # Import agent modules
 financial_agent = importlib.import_module("manager.sub_agents.financial_agent.agent")
@@ -115,6 +124,14 @@ def test_sales_agent_tools(test_db, monkeypatch):
     assert isinstance(trend.monthly_sales, list)
     assert isinstance(trend.slope, float)
 
+    forecast = sales_agent.forecast_next_month_sales("forecast")
+    assert isinstance(forecast, sales_agent.SalesForecast)
+    assert isinstance(forecast.next_month_sales, float)
+
+    top_items = sales_agent.get_top_items_sold("top")
+    assert isinstance(top_items, sales_agent.TopItemsSold)
+    assert isinstance(top_items.top_items, list)
+
 
 def test_purchase_agent_tools(test_db, monkeypatch):
     patch_db(monkeypatch, test_db)
@@ -124,6 +141,15 @@ def test_purchase_agent_tools(test_db, monkeypatch):
     assert isinstance(summary.total_invoices, int)
     assert isinstance(summary.top_suppliers, list)
     assert isinstance(summary.voucher_types, list)
+
+    trend = purchase_agent.get_purchase_trend("trend")
+    assert isinstance(trend, purchase_agent.PurchaseTrend)
+    assert isinstance(trend.monthly_purchases, list)
+    assert isinstance(trend.slope, float)
+
+    top_items = purchase_agent.get_top_items_purchased("top")
+    assert isinstance(top_items, purchase_agent.TopPurchasedItems)
+    assert isinstance(top_items.top_items, list)
 
 
 def test_inventory_agent_tools(test_db, monkeypatch):
@@ -138,3 +164,11 @@ def test_inventory_agent_tools(test_db, monkeypatch):
     forecast = inventory_agent.forecast_inventory_demand("forecast")
     assert isinstance(forecast, inventory_agent.InventoryDemandForecast)
     assert isinstance(forecast.next_month_quantity, float)
+
+    turnover = inventory_agent.calculate_inventory_turnover("turnover")
+    assert isinstance(turnover, inventory_agent.InventoryTurnover)
+    assert isinstance(turnover.turnover_ratio, float)
+
+    low_stock = inventory_agent.get_low_stock_items("low")
+    assert isinstance(low_stock, inventory_agent.LowStockItems)
+    assert isinstance(low_stock.items, list)
