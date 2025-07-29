@@ -176,6 +176,26 @@ The available sub-agents are:
 
 The manager agent automatically routes queries to the most relevant specialist based on the user's request.
 
+### Typical Use Cases and Example Queries
+
+- **greeting_agent** – quick introductions or pleasantries
+  - "Hello!"
+  - "Good morning, who am I speaking with?"
+- **sales_agent** – sales invoices, customers and revenue trends
+  - "Summarize our latest sales invoices."
+  - "Who are our top customers this month?"
+  - "Show the sales trend for the past quarter."
+- **purchase_agent** – vendor spending and purchase orders
+  - "Give me a breakdown of recent purchase orders."
+  - "Which suppliers do we buy from the most?"
+- **inventory_agent** – stock levels and upcoming demand
+  - "How many units of each product do we have in stock?"
+  - "Forecast inventory demand for next month."
+- **financial_agent** – overall ledger balances and expense analysis
+  - "Provide our total debits and credits."
+  - "What are the top expense ledgers?"
+  - "Analyze the variance in our expenses."
+
 ## Getting Started
 
 This example uses the same virtual environment created in the root directory. Make sure you have:
@@ -193,6 +213,8 @@ source ../.venv/bin/activate
 2. Set up your API key:
    - Rename `.env.example` to `.env` in the manager folder
    - Add your Google API key to the `GOOGLE_API_KEY` variable in the `.env` file
+   - Optionally set `GOOGLE_GENAI_USE_VERTEXAI` if you use Vertex AI (default `FALSE`)
+   - Agents read data from `tallydb.db` in the project root; update the `DB_PATH` constant in each sub-agent if your database lives elsewhere
 
 ## Running the Example
 
@@ -210,6 +232,8 @@ adk web
 4. Select the "manager" agent from the dropdown menu in the top-left corner of the UI
 
 5. Start chatting with your agent in the textbox at the bottom of the screen
+   - The manager interprets your request and forwards it to the most relevant sub-agent
+   - The chosen sub-agent executes its tools and returns a summary which the manager delivers back to you
 
 ### Troubleshooting
 
