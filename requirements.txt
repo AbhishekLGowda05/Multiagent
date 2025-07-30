@@ -6,3 +6,7 @@ scikit-learn
 python-dotenv
 pydantic
 pytest
+
+google-auth
+google-auth-oauthlib
+google-api-python-client
