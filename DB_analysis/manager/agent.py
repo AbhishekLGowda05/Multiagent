@@ -15,9 +15,35 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Now import Google utilities
-from google_utils.gmail_tools import send_email
-from google_utils.calendar_tools import create_event
+# Now import Google utilities with better error handling
+try:
+    from google_utils.gmail_tools import send_email
+    from google_utils.calendar_tools import create_event
+    GOOGLE_UTILS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Google utilities not available: {e}")
+    
+    def send_email(to_email: str, subject: str, body: str) -> dict:
+        return {
+            "status": "demo_mode",
+            "message": f"📧 Email would be sent to {to_email}",
+            "subject": subject,
+            "to": to_email,
+            "body": body[:100] + "..." if len(body) > 100 else body,
+            "note": "Demo mode - Google credentials not configured"
+        }
+    
+    def create_event(title: str, start_time: str, end_time: str) -> dict:
+        return {
+            "status": "demo_mode",
+            "message": f"📅 Calendar event '{title}' would be created",
+            "title": title,
+            "start_time": start_time,
+            "end_time": end_time,
+            "note": "Demo mode - Google credentials not configured"
+        }
+    
+    GOOGLE_UTILS_AVAILABLE = False
 
 import re
 from datetime import datetime, timedelta
@@ -84,10 +110,85 @@ def smart_schedule_event(query: str) -> Any:
     pattern3 = re.search(r"schedule (?:a )?meeting (today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm) titled ['\"](.+?)['\"]", query, re.I)
     # Pattern 4: "Book [meeting type] session [when]"
     pattern4 = re.search(r"book (.+?) session (today|tomorrow)", query, re.I)
+    # Pattern 5: "schedule meeting with [name] on [date] at [time]" - NEW PATTERN
+    pattern5 = re.search(r"schedule (?:a )?meeting (?:with [\w\s]+)?on (\d{1,2})(?:st|nd|rd|th)? of (\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
+    # Pattern 6: Generic date pattern "schedule meeting [date] at [time]"
+    pattern6 = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
     base_date = datetime.now()
     
-    if pattern3:
+    def parse_month(month_str):
+        """Helper function to parse month names to numbers."""
+        months = {
+            'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
+            'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6,
+            'july': 7, 'jul': 7, 'august': 8, 'aug': 8, 'september': 9, 'sep': 9,
+            'october': 10, 'oct': 10, 'november': 11, 'nov': 11, 'december': 12, 'dec': 12
+        }
+        return months.get(month_str.lower(), datetime.now().month)
+    
+    # Check new patterns first (date-specific)
+    if pattern5:
+        day, month, start_hour, start_min, start_period = pattern5.groups()
+        
+        # Parse the specific date
+        month_num = parse_month(month)
+        day_num = int(day)
+        year = datetime.now().year
+        
+        # If the date has passed this year, use next year
+        target_date = datetime(year, month_num, day_num)
+        if target_date < datetime.now():
+            target_date = datetime(year + 1, month_num, day_num)
+        
+        # Parse time
+        start_hour = int(start_hour)
+        if start_period.lower() == "pm" and start_hour != 12:
+            start_hour += 12
+        elif start_period.lower() == "am" and start_hour == 12:
+            start_hour = 0
+        
+        start_time = target_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
+        end_time = start_time + timedelta(hours=1)
+        
+        # Extract meeting title from query
+        meeting_title = "Business Meeting"
+        if "sales" in query.lower():
+            meeting_title = "Sales Review Meeting"
+        
+        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+    
+    elif pattern6:
+        day, month, start_hour, start_min, start_period = pattern6.groups()
+        
+        # Parse the specific date
+        month_num = parse_month(month)
+        day_num = int(day)
+        year = datetime.now().year
+        
+        # If the date has passed this year, use next year
+        target_date = datetime(year, month_num, day_num)
+        if target_date < datetime.now():
+            target_date = datetime(year + 1, month_num, day_num)
+        
+        # Parse time
+        start_hour = int(start_hour)
+        if start_period.lower() == "pm" and start_hour != 12:
+            start_hour += 12
+        elif start_period.lower() == "am" and start_hour == 12:
+            start_hour = 0
+        
+        start_time = target_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
+        end_time = start_time + timedelta(hours=1)
+        
+        # Extract meeting title from query
+        meeting_title = "Business Meeting"
+        if "sales" in query.lower():
+            meeting_title = "Sales Review Meeting"
+        
+        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+    
+    elif pattern3:
         day, start_hour, start_min, start_period, title = pattern3.groups()
         meeting_type = title
         
@@ -165,7 +266,48 @@ def smart_schedule_event(query: str) -> Any:
         return create_event(f"{session_type.title()} Session", start_time.isoformat() + "Z", end_time.isoformat() + "Z")
     
     else:
-        raise ValueError("Could not parse calendar command. Please specify day and time.")
+        # If no patterns match, try to extract basic date/time info
+        time_match = re.search(r"(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
+        date_match = re.search(r"(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+)", query, re.I)
+        
+        if time_match and date_match:
+            # Extract time
+            hour, minute, period = time_match.groups()
+            hour = int(hour)
+            if period.lower() == "pm" and hour != 12:
+                hour += 12
+            elif period.lower() == "am" and hour == 12:
+                hour = 0
+            
+            # Extract date
+            day, month = date_match.groups()
+            month_num = parse_month(month)
+            day_num = int(day)
+            year = datetime.now().year
+            
+            # If the date has passed this year, use next year
+            target_date = datetime(year, month_num, day_num)
+            if target_date < datetime.now():
+                target_date = datetime(year + 1, month_num, day_num)
+            
+            start_time = target_date.replace(hour=hour, minute=int(minute or 0), second=0, microsecond=0)
+            end_time = start_time + timedelta(hours=1)
+            
+            meeting_title = "Business Meeting"
+            if "sales" in query.lower():
+                meeting_title = "Sales Review Meeting"
+            
+            return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        
+        return {
+            "status": "error",
+            "message": "Could not parse calendar command. Please specify day and time in a clearer format.",
+            "examples": [
+                "schedule meeting tomorrow at 2 PM",
+                "schedule meeting on 31st of July at 7 PM",
+                "create meeting today from 10 AM to 11 AM"
+            ]
+        }
 
 def combined_analytics_and_email_calendar(query: str) -> Any:
     """Handle queries that combine analytics with email and/or calendar actions."""
@@ -174,31 +316,50 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
     # Check if query contains both email and calendar actions
     has_email = any(keyword in query.lower() for keyword in ["send", "email", "@"])
     has_calendar = any(keyword in query.lower() for keyword in ["schedule", "meeting", "calendar"])
-    has_analysis = any(keyword in query.lower() for keyword in ["profit", "analysis", "report", "sales", "financial"])
+    has_analysis = any(keyword in query.lower() for keyword in ["profit", "analysis", "report", "sales", "financial", "summary"])
     
     if has_analysis and (has_email or has_calendar):
         # First perform analysis if requested
         if has_analysis:
-            analysis_result = cross_orchestrator.handle_query(query)
-            results["analysis_result"] = analysis_result
+            try:
+                analysis_result = cross_orchestrator.handle_query(query)
+                results["analysis_result"] = analysis_result
+                results["analysis_status"] = "✅ Analysis completed successfully"
+            except Exception as e:
+                results["analysis_error"] = f"❌ Analysis failed: {str(e)}"
         
         # Then handle email
         if has_email:
             try:
                 email_result = smart_send_email(query)
                 results["email_result"] = email_result
+                if email_result.get("status") == "demo_mode":
+                    results["email_status"] = "📧 Email prepared (demo mode - configure Google credentials to send)"
+                else:
+                    results["email_status"] = "✅ Email sent successfully"
             except Exception as e:
-                results["email_error"] = str(e)
+                results["email_error"] = f"❌ Email failed: {str(e)}"
         
         # Then handle calendar
         if has_calendar:
             try:
                 calendar_result = smart_schedule_event(query)
                 results["calendar_result"] = calendar_result
+                if isinstance(calendar_result, dict) and calendar_result.get("status") == "demo_mode":
+                    results["calendar_status"] = "📅 Calendar event prepared (demo mode - configure Google credentials to create)"
+                elif isinstance(calendar_result, dict) and calendar_result.get("status") == "error":
+                    results["calendar_status"] = f"❌ Calendar parsing failed: {calendar_result.get('message')}"
+                else:
+                    results["calendar_status"] = "✅ Calendar event scheduled successfully"
             except Exception as e:
-                results["calendar_error"] = str(e)
+                results["calendar_error"] = f"❌ Calendar failed: {str(e)}"
         
-        results["message"] = "Combined workflow completed successfully"
+        # Summary message
+        success_count = sum(1 for key in results.keys() if key.endswith("_status") and "✅" in results[key])
+        total_actions = len([k for k in results.keys() if k.endswith("_status")])
+        
+        results["summary"] = f"Workflow completed: {success_count}/{total_actions} actions successful"
+        
         return results
     
     raise ValueError("Could not parse combined workflow command")
