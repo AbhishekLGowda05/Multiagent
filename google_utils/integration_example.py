@@ -30,23 +30,36 @@ def send_email_tool(query: str) -> Any:
 def create_event_tool(query: str) -> Any:
     """Parse a simple scheduling command and create a calendar event."""
     # Example query: "Schedule a project review meeting tomorrow from 3 PM to 4 PM."
+    # Example patterns:
+    #   "Schedule a meeting tomorrow at 11 AM"
+    #   "Schedule project review today at 2:30 pm"
     match = re.search(
-        r"(today|tomorrow) from (\d+) PM to (\d+) PM", query, re.I
+        r"(today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I
     )
     if not match:
         raise ValueError("Could not parse calendar command")
-    day, start_h, end_h = match.groups()
+
+    day, hour, minute, period = match.groups()
+
     start_date = datetime.utcnow()
     if day.lower() == "tomorrow":
         start_date += timedelta(days=1)
-    start_time = start_date.replace(hour=int(start_h) + 12, minute=0, second=0)
-    end_time = start_date.replace(hour=int(end_h) + 12, minute=0, second=0)
+
+    hour = int(hour)
+    if period.lower() == "pm" and hour != 12:
+        hour += 12
+    elif period.lower() == "am" and hour == 12:
+        hour = 0
+
+    minute = int(minute or 0)
+    start_time = start_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    end_time = start_time + timedelta(hours=1)
 
     summary = re.sub(r"schedule |meeting|today|tomorrow.*", "", query, flags=re.I).strip()
     return create_event(
         summary or "New Event",
-        start_time.isoformat() + "Z",
-        end_time.isoformat() + "Z",
+        start_time,
+        end_time,
     )
 
 
