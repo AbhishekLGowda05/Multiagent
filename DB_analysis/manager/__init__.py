@@ -1,4 +1,8 @@
-from .agent import root_agent
+try:
+    from .agent import root_agent
+except Exception:  # pragma: no cover - optional dependency not available
+    root_agent = None
+
 from .utils import get_current_time
 from .cross_agent_orchestrator import CrossAgentOrchestrator, DEFAULT_SPECS
 
