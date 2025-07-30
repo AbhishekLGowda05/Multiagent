@@ -278,7 +278,7 @@ DEFAULT_SPECS: Dict[str, AgentSpec] = {
     ),
     "purchase_agent": AgentSpec(
         agent=purchase_agent,
-        keywords=["purchase", "supplier", "vendor", "procurement", "buying", "expense"],
+        keywords=["purchase", "supplier", "vendor", "procurement", "buying", "expense", "profit", "drop"],
         tools={
             "purchase_trend": get_purchase_trend,
             "purchase_summary": get_purchase_summary,
