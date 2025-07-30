@@ -38,6 +38,8 @@ class CrossAgentOrchestrator:
                         data = result.model_dump()
                     elif hasattr(result, "dict"):
                         data = result.dict()
+                    elif isinstance(result, dict):
+                        data = result
                     else:
                         data = result.__dict__
                     agent_result[tool_name] = data
