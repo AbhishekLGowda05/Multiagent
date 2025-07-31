@@ -20,8 +20,17 @@ def _to_iso(dt: datetime | str) -> str:
     return dt
 
 
-def create_event(summary: str, start_time: datetime | str, end_time: datetime | str, *, time_zone: str = "UTC") -> Any:
+def create_event(
+    summary: str,
+    start_time: datetime | str,
+    end_time: datetime | str,
+    *,
+    time_zone: str = "UTC",
+    description: str | None = None,
+) -> Any:
+
     """Create a calendar event on the user's primary calendar."""
+
     creds = get_credentials(CALENDAR_SCOPES)
     service = build("calendar", "v3", credentials=creds)
 
@@ -33,6 +42,11 @@ def create_event(summary: str, start_time: datetime | str, end_time: datetime | 
         "start": {"dateTime": start_iso, "timeZone": time_zone},
         "end": {"dateTime": end_iso, "timeZone": time_zone},
     }
+    if description is not None:
+        event["description"] = description
+
+    if description:
+        event["description"] = description
 
     result = service.events().insert(calendarId="primary", body=event).execute()
     print(f"📅 Created event '{summary}' from {start_iso} to {end_iso}")
