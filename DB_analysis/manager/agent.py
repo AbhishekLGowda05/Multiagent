@@ -118,8 +118,13 @@ def smart_schedule_event(query: str) -> Any:
     pattern5 = re.search(r"schedule (?:a )?meeting (?:with [\w\s]+)?on (\d{1,2})(?:st|nd|rd|th)? of (\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     # Pattern for "schedule meeting tomorrow at 11 AM titled 'Title'"
     pattern3 = re.search(r"schedule (?:a )?meeting (today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm) titled ['\"](.+?)['\"]", query, re.I)
-    # Pattern for time first then date e.g. "at 7 PM on 31st of July"
-    pattern4 = re.search(r"schedule (?:a )?meeting at (\d+)(?::(\d+))?\s*(am|pm) on (\d{1,2})(?:st|nd|rd|th)?(?: of)? (\w+)", query, re.I)
+    # Pattern for "schedule meeting at 7 PM on 31st of July"
+    pattern_time_first = re.search(
+        r"at (\d+)(?::(\d+))?\s*(am|pm) on (\d{1,2})(?:st|nd|rd|th)?(?: of)? (\w+)",
+        query,
+        re.I,
+    )
+
     # General pattern for date and time
     pattern_general = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
@@ -166,8 +171,9 @@ def smart_schedule_event(query: str) -> Any:
         
         return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
     
-    elif pattern4:
-        start_hour, start_min, start_period, day, month = pattern4.groups()
+    elif pattern_time_first:
+        start_hour, start_min, start_period, day, month = pattern_time_first.groups()
+
 
         month_num = parse_month(month)
         day_num = int(day)
