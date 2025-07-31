@@ -54,6 +54,7 @@ cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 
 def smart_send_email(query: str) -> Any:
     """Enhanced email tool that can handle business analytics context."""
+    print(f"[LOG] smart_send_email triggered with query: {query}")
     # Pattern 1: "Send [content] to [email]"
     pattern1 = re.search(r"send (.+?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
     # Pattern 2: "Email [name] about [subject]"
@@ -112,6 +113,7 @@ def smart_send_email(query: str) -> Any:
 
 def smart_schedule_event(query: str) -> Any:
     """Enhanced calendar tool for business meetings and analytics sessions."""
+    print(f"[LOG] smart_schedule_event triggered with query: {query}")
     # Pattern for "schedule meeting with [name] on 31st of July at 7pm"
     pattern5 = re.search(r"schedule (?:a )?meeting (?:with [\w\s]+)?on (\d{1,2})(?:st|nd|rd|th)? of (\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     # Pattern for "schedule meeting tomorrow at 11 AM titled 'Title'"
@@ -122,6 +124,7 @@ def smart_schedule_event(query: str) -> Any:
         query,
         re.I,
     )
+
     # General pattern for date and time
     pattern_general = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
@@ -170,6 +173,7 @@ def smart_schedule_event(query: str) -> Any:
     
     elif pattern_time_first:
         start_hour, start_min, start_period, day, month = pattern_time_first.groups()
+
 
         month_num = parse_month(month)
         day_num = int(day)
