@@ -33,22 +33,15 @@ except ImportError as e:
             "note": "Demo mode - Google credentials not configured"
         }
     
-    def create_event(
-        title: str, start_time: str, end_time: str, description: str | None = None
-    ) -> dict:
-        event = {
-
+    def create_event(title: str, start_time: str, end_time: str) -> dict:
+        return {
             "status": "demo_mode",
             "message": f"📅 Calendar event '{title}' would be created",
             "title": title,
             "start_time": start_time,
             "end_time": end_time,
-            "note": "Demo mode - Google credentials not configured",
-
+            "note": "Demo mode - Google credentials not configured"
         }
-        if description is not None:
-            event["description"] = description
-        return event
     
     GOOGLE_UTILS_AVAILABLE = False
 
@@ -56,21 +49,11 @@ import re
 from datetime import datetime, timedelta
 from typing import Any
 
-# Rest of your code remains the same...
+# Initialize cross-agent orchestrator
 cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 
-# Enhanced Google integration tools with better pattern matching
-def smart_send_email(query: str, body_override: str | None = None) -> Any:
-    """Enhanced email tool that can handle business analytics context.
-
-    Parameters
-    ----------
-    query : str
-        Natural language command containing email details.
-    body_override : str | None, optional
-        When provided, this text will be used as the email body instead
-        of the automatically generated content.
-    """
+def smart_send_email(query: str) -> Any:
+    """Enhanced email tool that can handle business analytics context."""
     # Pattern 1: "Send [content] to [email]"
     pattern1 = re.search(r"send (.+?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
     # Pattern 2: "Email [name] about [subject]"
@@ -84,8 +67,7 @@ def smart_send_email(query: str, body_override: str | None = None) -> Any:
         content, to_email = pattern1.groups()
         subject = f"{content.title()}"
         body = f"Hi,\n\nPlease find the {content} as requested.\n\nBest regards"
-        body_final = body_override if body_override is not None else body
-        return send_email(to_email, subject, body_final)
+        return send_email(to_email, subject, body)
     
     elif pattern3:
         to_recipient, subject = pattern3.groups()
@@ -95,8 +77,7 @@ def smart_send_email(query: str, body_override: str | None = None) -> Any:
         else:
             to_email = f"{to_recipient.lower().replace(' ', '')}@example.com"
         body = f"Hi,\n\nRegarding: {subject}\n\nPlease find the requested information attached.\n\nBest regards"
-        body_final = body_override if body_override is not None else body
-        return send_email(to_email, subject, body_final)
+        return send_email(to_email, subject, body)
     
     elif pattern4:
         # Found email address in query
@@ -104,46 +85,39 @@ def smart_send_email(query: str, body_override: str | None = None) -> Any:
         if "profit" in query.lower():
             subject = "Profit Analysis Report"
             body = "Hi,\n\nPlease find the profit analysis report as requested.\n\nBest regards"
+        elif "sales" in query.lower():
+            subject = "Sales Analysis Report"
+            body = "Hi,\n\nPlease find the sales analysis report as requested.\n\nBest regards"
         else:
             subject = "Business Report"
             body = "Hi,\n\nPlease find the requested business analysis.\n\nBest regards"
-        body_final = body_override if body_override is not None else body
-        return send_email(to_email, subject, body_final)
+        return send_email(to_email, subject, body)
     
     elif pattern2:
         to_name, subject = pattern2.groups()
         to_email = f"{to_name.lower()}@example.com"
         body = f"Hi {to_name},\n\nRegarding: {subject}\n\nPlease find the requested information.\n\nBest regards"
-        body_final = body_override if body_override is not None else body
-        return send_email(to_email, subject, body_final)
+        return send_email(to_email, subject, body)
     
     else:
-        raise ValueError("Could not parse email command. Please provide recipient email or name.")
+        return {
+            "status": "error",
+            "message": "Could not parse email command. Please provide recipient email or name.",
+            "examples": [
+                "send report to user@email.com",
+                "email John about quarterly results",
+                "send profit analysis to manager@company.com"
+            ]
+        }
 
-def smart_schedule_event(query: str, description: str | None = None) -> Any:
-    """Enhanced calendar tool for business meetings and analytics sessions.
-
-    Parameters
-    ----------
-    query : str
-        Natural language command describing the meeting.
-    description : str | None, optional
-        Optional description to include in the calendar event.
-    """
-    # Pattern 1: "Schedule [meeting] for [day] at [time]" or "schedule a meeting tomorrow at 11 AM titled 'Title'"
-    pattern1 = re.search(r"schedule (?:a )?(?:meeting )?(.+?) (?:for |on )?(today|tomorrow|monday|tuesday|wednesday|thursday|friday) at (\d+)(?::(\d+))?\s*(am|pm)(?:\s*titled\s*['\"](.+?)['\"])?", query, re.I)
-    # Pattern 2: "Create meeting [subject] tomorrow from [time] to [time]"
-    pattern2 = re.search(r"create (?:meeting |event )?(.+?) (today|tomorrow) from (\d+)\s*(am|pm) to (\d+)\s*(am|pm)", query, re.I)
-    # Pattern 3: Enhanced pattern for "schedule meeting tomorrow at 11 AM titled 'Title'"
-    pattern3 = re.search(r"schedule (?:a )?meeting (today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm) titled ['\"](.+?)['\"]", query, re.I)
-    # Pattern 4: "Book [meeting type] session [when]"
-    pattern4 = re.search(r"book (.+?) session (today|tomorrow)", query, re.I)
-    # Pattern 5: "schedule meeting with [name] on [date] at [time]" - NEW PATTERN
+def smart_schedule_event(query: str) -> Any:
+    """Enhanced calendar tool for business meetings and analytics sessions."""
+    # Pattern for "schedule meeting with [name] on 31st of July at 7pm"
     pattern5 = re.search(r"schedule (?:a )?meeting (?:with [\w\s]+)?on (\d{1,2})(?:st|nd|rd|th)? of (\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
-    # Pattern 6: Generic date pattern "schedule meeting [date] at [time]"
-    pattern6 = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
-    # Pattern 7: Allow time before date e.g. "schedule meeting at 7 PM on 31st of July"
-    pattern7 = re.search(r"schedule (?:a )?meeting .*?at (\d+)(?::(\d+))?\s*(am|pm) on (\d{1,2})(?:st|nd|rd|th)?(?: of)? (\w+)", query, re.I)
+    # Pattern for "schedule meeting tomorrow at 11 AM titled 'Title'"
+    pattern3 = re.search(r"schedule (?:a )?meeting (today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm) titled ['\"](.+?)['\"]", query, re.I)
+    # General pattern for date and time
+    pattern_general = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
     base_date = datetime.now()
     
@@ -157,7 +131,7 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
         }
         return months.get(month_str.lower(), datetime.now().month)
     
-    # Check new patterns first (date-specific)
+    # Check for specific date patterns first
     if pattern5:
         day, month, start_hour, start_min, start_period = pattern5.groups()
         
@@ -186,15 +160,10 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
         if "sales" in query.lower():
             meeting_title = "Sales Review Meeting"
         
-        return create_event(
-            meeting_title,
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
+        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
     
-    elif pattern6:
-        day, month, start_hour, start_min, start_period = pattern6.groups()
+    elif pattern_general:
+        day, month, start_hour, start_min, start_period = pattern_general.groups()
         
         # Parse the specific date
         month_num = parse_month(month)
@@ -221,37 +190,8 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
         if "sales" in query.lower():
             meeting_title = "Sales Review Meeting"
         
-
         return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
-
-    elif pattern7:
-        start_hour, start_min, start_period, day, month = pattern7.groups()
-
-        # Parse the specific date
-        month_num = parse_month(month)
-        day_num = int(day)
-        year = datetime.now().year
-
-        target_date = datetime(year, month_num, day_num)
-        if target_date < datetime.now():
-            target_date = datetime(year + 1, month_num, day_num)
-
-        # Parse time
-        start_hour = int(start_hour)
-        if start_period.lower() == "pm" and start_hour != 12:
-            start_hour += 12
-        elif start_period.lower() == "am" and start_hour == 12:
-            start_hour = 0
-
-        start_time = target_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
-        end_time = start_time + timedelta(hours=1)
-
-        meeting_title = "Business Meeting"
-        if "sales" in query.lower():
-            meeting_title = "Sales Review Meeting"
-
-        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
-
+    
     elif pattern3:
         day, start_hour, start_min, start_period, title = pattern3.groups()
         meeting_type = title
@@ -268,126 +208,11 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
             start_hour = 0
         
         start_time = base_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
-        end_time = start_time + timedelta(hours=1)  # Default 1 hour meeting
-        
-        return create_event(
-            meeting_type,
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
-    
-    elif pattern1:
-        meeting_type, day, start_hour, start_min, start_period, title = pattern1.groups()
-        
-        # Use title if provided, otherwise use meeting_type
-        if title:
-            meeting_type = title
-        
-        # Calculate date
-        if day and day.lower() == "tomorrow":
-            base_date += timedelta(days=1)
-        elif day and day.lower() == "today":
-            pass  # Use current date
-        
-        # Parse start time
-        start_hour = int(start_hour)
-        if start_period.lower() == "pm" and start_hour != 12:
-            start_hour += 12
-        elif start_period.lower() == "am" and start_hour == 12:
-            start_hour = 0
-        
-        start_time = base_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
         end_time = start_time + timedelta(hours=1)
         
-        return create_event(
-            meeting_type.title(),
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
-    
-    elif pattern2:
-        meeting_type, day, start_hour, start_period, end_hour, end_period = pattern2.groups()
-        
-        if day.lower() == "tomorrow":
-            base_date += timedelta(days=1)
-        
-        # Parse times
-        start_hour = int(start_hour)
-        if start_period.lower() == "pm" and start_hour != 12:
-            start_hour += 12
-        
-        end_hour = int(end_hour)
-        if end_period.lower() == "pm" and end_hour != 12:
-            end_hour += 12
-        
-        start_time = base_date.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-        end_time = base_date.replace(hour=end_hour, minute=0, second=0, microsecond=0)
-        
-        return create_event(
-            meeting_type.title(),
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
-    
-    elif pattern4:
-        session_type, day = pattern4.groups()
-        
-        if day.lower() == "tomorrow":
-            base_date += timedelta(days=1)
-        
-        # Default to 2 PM - 3 PM for sessions
-        start_time = base_date.replace(hour=14, minute=0, second=0, microsecond=0)
-        end_time = start_time + timedelta(hours=1)
-        
-        return create_event(
-            f"{session_type.title()} Session",
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
+        return create_event(meeting_type, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
     
     else:
-        # If no patterns match, try to extract basic date/time info
-        time_match = re.search(r"(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
-        date_match = re.search(r"(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+)", query, re.I)
-        
-        if time_match and date_match:
-            # Extract time
-            hour, minute, period = time_match.groups()
-            hour = int(hour)
-            if period.lower() == "pm" and hour != 12:
-                hour += 12
-            elif period.lower() == "am" and hour == 12:
-                hour = 0
-            
-            # Extract date
-            day, month = date_match.groups()
-            month_num = parse_month(month)
-            day_num = int(day)
-            year = datetime.now().year
-            
-            # If the date has passed this year, use next year
-            target_date = datetime(year, month_num, day_num)
-            if target_date < datetime.now():
-                target_date = datetime(year + 1, month_num, day_num)
-            
-            start_time = target_date.replace(hour=hour, minute=int(minute or 0), second=0, microsecond=0)
-            end_time = start_time + timedelta(hours=1)
-            
-            meeting_title = "Business Meeting"
-            if "sales" in query.lower():
-                meeting_title = "Sales Review Meeting"
-            
-            return create_event(
-                meeting_title,
-                start_time.isoformat() + "Z",
-                end_time.isoformat() + "Z",
-                description=description,
-            )
-        
         return {
             "status": "error",
             "message": "Could not parse calendar command. Please specify day and time in a clearer format.",
@@ -395,7 +220,7 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
                 "schedule meeting tomorrow at 2 PM",
                 "schedule meeting on 31st of July at 7 PM",
                 "schedule meeting at 7 PM on 31st of July",
-                "create meeting today from 10 AM to 11 AM"
+                "schedule meeting tomorrow at 11 AM titled 'Review'"
             ]
         }
 
@@ -410,35 +235,18 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
     
     if has_analysis and (has_email or has_calendar):
         # First perform analysis if requested
-        summary_text = None
-
         if has_analysis:
             try:
                 analysis_result = cross_orchestrator.handle_query(query)
                 results["analysis_result"] = analysis_result
                 results["analysis_status"] = "✅ Analysis completed successfully"
-
-                # Create a short text summary from cross-agent analysis
-                summary_lines = []
-                analysis_meta = analysis_result.get("_metadata", {}).get(
-                    "cross_agent_analysis", {}
-                )
-                if analysis_meta:
-                    if analysis_meta.get("summary"):
-                        summary_lines.append(f"- {analysis_meta['summary']}")
-                    for item in analysis_meta.get("key_findings", []):
-                        summary_lines.append(f"- {item}")
-                    for item in analysis_meta.get("recommendations", []):
-                        summary_lines.append(f"- {item}")
-                summary_text = "\n".join(summary_lines) if summary_lines else None
-                results["analysis_summary"] = summary_text
             except Exception as e:
                 results["analysis_error"] = f"❌ Analysis failed: {str(e)}"
 
         # Handle email
         if has_email:
             try:
-                email_result = smart_send_email(query, body_override=summary_text)
+                email_result = smart_send_email(query)
                 results["email_result"] = email_result
                 if email_result.get("status") == "demo_mode":
                     results["email_status"] = "📧 Email prepared (demo mode - configure Google credentials to send)"
@@ -450,7 +258,7 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
         # Handle calendar
         if has_calendar:
             try:
-                calendar_result = smart_schedule_event(query, description=summary_text)
+                calendar_result = smart_schedule_event(query)
                 results["calendar_result"] = calendar_result
                 if isinstance(calendar_result, dict) and calendar_result.get("status") == "demo_mode":
                     results["calendar_status"] = "📅 Calendar event prepared (demo mode - configure Google credentials to create)"
@@ -466,10 +274,12 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
         total_actions = len([k for k in results.keys() if k.endswith("_status")])
 
         results["summary"] = f"Workflow completed: {success_count}/{total_actions} actions successful"
-
         return results
 
-    raise ValueError("Could not parse combined workflow command")
+    return {
+        "status": "error",
+        "message": "Could not parse combined workflow command"
+    }
 
 root_agent = Agent(
     name="manager",
