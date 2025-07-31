@@ -33,13 +33,14 @@ except ImportError as e:
             "note": "Demo mode - Google credentials not configured"
         }
     
-    def create_event(title: str, start_time: str, end_time: str) -> dict:
+    def create_event(title: str, start_time: str, end_time: str, description: str | None = None) -> dict:
         return {
             "status": "demo_mode",
             "message": f"📅 Calendar event '{title}' would be created",
             "title": title,
             "start_time": start_time,
             "end_time": end_time,
+            "description": description,
             "note": "Demo mode - Google credentials not configured"
         }
     
@@ -53,8 +54,17 @@ from typing import Any
 cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 
 # Enhanced Google integration tools with better pattern matching
-def smart_send_email(query: str) -> Any:
-    """Enhanced email tool that can handle business analytics context."""
+def smart_send_email(query: str, body_override: str | None = None) -> Any:
+    """Enhanced email tool that can handle business analytics context.
+
+    Parameters
+    ----------
+    query : str
+        Natural language command containing email details.
+    body_override : str | None, optional
+        When provided, this text will be used as the email body instead
+        of the automatically generated content.
+    """
     # Pattern 1: "Send [content] to [email]"
     pattern1 = re.search(r"send (.+?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
     # Pattern 2: "Email [name] about [subject]"
@@ -68,7 +78,8 @@ def smart_send_email(query: str) -> Any:
         content, to_email = pattern1.groups()
         subject = f"{content.title()}"
         body = f"Hi,\n\nPlease find the {content} as requested.\n\nBest regards"
-        return send_email(to_email, subject, body)
+        body_final = body_override if body_override is not None else body
+        return send_email(to_email, subject, body_final)
     
     elif pattern3:
         to_recipient, subject = pattern3.groups()
@@ -78,7 +89,8 @@ def smart_send_email(query: str) -> Any:
         else:
             to_email = f"{to_recipient.lower().replace(' ', '')}@example.com"
         body = f"Hi,\n\nRegarding: {subject}\n\nPlease find the requested information attached.\n\nBest regards"
-        return send_email(to_email, subject, body)
+        body_final = body_override if body_override is not None else body
+        return send_email(to_email, subject, body_final)
     
     elif pattern4:
         # Found email address in query
@@ -89,19 +101,29 @@ def smart_send_email(query: str) -> Any:
         else:
             subject = "Business Report"
             body = "Hi,\n\nPlease find the requested business analysis.\n\nBest regards"
-        return send_email(to_email, subject, body)
+        body_final = body_override if body_override is not None else body
+        return send_email(to_email, subject, body_final)
     
     elif pattern2:
         to_name, subject = pattern2.groups()
         to_email = f"{to_name.lower()}@example.com"
         body = f"Hi {to_name},\n\nRegarding: {subject}\n\nPlease find the requested information.\n\nBest regards"
-        return send_email(to_email, subject, body)
+        body_final = body_override if body_override is not None else body
+        return send_email(to_email, subject, body_final)
     
     else:
         raise ValueError("Could not parse email command. Please provide recipient email or name.")
 
-def smart_schedule_event(query: str) -> Any:
-    """Enhanced calendar tool for business meetings and analytics sessions."""
+def smart_schedule_event(query: str, description: str | None = None) -> Any:
+    """Enhanced calendar tool for business meetings and analytics sessions.
+
+    Parameters
+    ----------
+    query : str
+        Natural language command describing the meeting.
+    description : str | None, optional
+        Optional description to include in the calendar event.
+    """
     # Pattern 1: "Schedule [meeting] for [day] at [time]" or "schedule a meeting tomorrow at 11 AM titled 'Title'"
     pattern1 = re.search(r"schedule (?:a )?(?:meeting )?(.+?) (?:for |on )?(today|tomorrow|monday|tuesday|wednesday|thursday|friday) at (\d+)(?::(\d+))?\s*(am|pm)(?:\s*titled\s*['\"](.+?)['\"])?", query, re.I)
     # Pattern 2: "Create meeting [subject] tomorrow from [time] to [time]"
@@ -156,7 +178,12 @@ def smart_schedule_event(query: str) -> Any:
         if "sales" in query.lower():
             meeting_title = "Sales Review Meeting"
         
-        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            meeting_title,
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     elif pattern6:
         day, month, start_hour, start_min, start_period = pattern6.groups()
@@ -186,7 +213,12 @@ def smart_schedule_event(query: str) -> Any:
         if "sales" in query.lower():
             meeting_title = "Sales Review Meeting"
         
-        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            meeting_title,
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     elif pattern3:
         day, start_hour, start_min, start_period, title = pattern3.groups()
@@ -206,7 +238,12 @@ def smart_schedule_event(query: str) -> Any:
         start_time = base_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
         end_time = start_time + timedelta(hours=1)  # Default 1 hour meeting
         
-        return create_event(meeting_type, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            meeting_type,
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     elif pattern1:
         meeting_type, day, start_hour, start_min, start_period, title = pattern1.groups()
@@ -231,7 +268,12 @@ def smart_schedule_event(query: str) -> Any:
         start_time = base_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
         end_time = start_time + timedelta(hours=1)
         
-        return create_event(meeting_type.title(), start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            meeting_type.title(),
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     elif pattern2:
         meeting_type, day, start_hour, start_period, end_hour, end_period = pattern2.groups()
@@ -251,7 +293,12 @@ def smart_schedule_event(query: str) -> Any:
         start_time = base_date.replace(hour=start_hour, minute=0, second=0, microsecond=0)
         end_time = base_date.replace(hour=end_hour, minute=0, second=0, microsecond=0)
         
-        return create_event(meeting_type.title(), start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            meeting_type.title(),
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     elif pattern4:
         session_type, day = pattern4.groups()
@@ -263,7 +310,12 @@ def smart_schedule_event(query: str) -> Any:
         start_time = base_date.replace(hour=14, minute=0, second=0, microsecond=0)
         end_time = start_time + timedelta(hours=1)
         
-        return create_event(f"{session_type.title()} Session", start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+        return create_event(
+            f"{session_type.title()} Session",
+            start_time.isoformat() + "Z",
+            end_time.isoformat() + "Z",
+            description=description,
+        )
     
     else:
         # If no patterns match, try to extract basic date/time info
@@ -297,7 +349,12 @@ def smart_schedule_event(query: str) -> Any:
             if "sales" in query.lower():
                 meeting_title = "Sales Review Meeting"
             
-            return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+            return create_event(
+                meeting_title,
+                start_time.isoformat() + "Z",
+                end_time.isoformat() + "Z",
+                description=description,
+            )
         
         return {
             "status": "error",
@@ -320,18 +377,34 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
     
     if has_analysis and (has_email or has_calendar):
         # First perform analysis if requested
+        summary_text = None
         if has_analysis:
             try:
                 analysis_result = cross_orchestrator.handle_query(query)
                 results["analysis_result"] = analysis_result
                 results["analysis_status"] = "✅ Analysis completed successfully"
+
+                # Create a short text summary from cross-agent analysis
+                summary_lines = []
+                analysis_meta = analysis_result.get("_metadata", {}).get(
+                    "cross_agent_analysis", {}
+                )
+                if analysis_meta:
+                    if analysis_meta.get("summary"):
+                        summary_lines.append(f"- {analysis_meta['summary']}")
+                    for item in analysis_meta.get("key_findings", []):
+                        summary_lines.append(f"- {item}")
+                    for item in analysis_meta.get("recommendations", []):
+                        summary_lines.append(f"- {item}")
+                summary_text = "\n".join(summary_lines) if summary_lines else None
+                results["analysis_summary"] = summary_text
             except Exception as e:
                 results["analysis_error"] = f"❌ Analysis failed: {str(e)}"
         
         # Then handle email
         if has_email:
             try:
-                email_result = smart_send_email(query)
+                email_result = smart_send_email(query, body_override=summary_text)
                 results["email_result"] = email_result
                 if email_result.get("status") == "demo_mode":
                     results["email_status"] = "📧 Email prepared (demo mode - configure Google credentials to send)"
@@ -343,7 +416,7 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
         # Then handle calendar
         if has_calendar:
             try:
-                calendar_result = smart_schedule_event(query)
+                calendar_result = smart_schedule_event(query, description=summary_text)
                 results["calendar_result"] = calendar_result
                 if isinstance(calendar_result, dict) and calendar_result.get("status") == "demo_mode":
                     results["calendar_status"] = "📅 Calendar event prepared (demo mode - configure Google credentials to create)"
