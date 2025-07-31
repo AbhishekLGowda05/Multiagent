@@ -77,7 +77,15 @@ def smart_send_email(query: str) -> Any:
     """Email helper that understands analytics context and remembers results."""
     print(f"[LOG] smart_send_email triggered with query: {query}")
 
-    # "send this to user@example.com"
+    # Pattern 1: "send this mail to user@example.com" - NEW PATTERN
+    match_send_mail = re.search(r"send this (?:mail|email) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+    if match_send_mail:
+        to_email = match_send_mail.group(1)
+        subject = "Sales Summary Report"
+        body = LAST_ANALYTICS_RESULT or "No analytics result available"
+        return send_email(to_email, subject, body)
+
+    # Pattern 2: "send this to user@example.com"
     match_send_this = re.search(r"send this to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
     if match_send_this:
         to_email = match_send_this.group(1)
@@ -85,11 +93,11 @@ def smart_send_email(query: str) -> Any:
         body = LAST_ANALYTICS_RESULT or "No analytics result available"
         return send_email(to_email, subject, body)
 
-    # "send report to user@example.com"
+    # Pattern 3: "send report to user@example.com"
     match_send_to = re.search(r"send (.+?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
     if match_send_to:
         subject_text, to_email = match_send_to.groups()
-        if subject_text.strip().lower() == "this":
+        if subject_text.strip().lower() in ["this", "mail", "email"]:
             subject = "Business Report"
             body = LAST_ANALYTICS_RESULT or "No analytics result available"
         else:
@@ -97,7 +105,7 @@ def smart_send_email(query: str) -> Any:
             body = f"Hi,\n\nPlease find the {subject_text} as requested.\n\nBest regards"
         return send_email(to_email, subject, body)
 
-    # "email John about quarterly results" or "send email to john@example.com about sales"
+    # Pattern 4: "email John about quarterly results" or "send email to john@example.com about sales"
     match_about = re.search(r"(?:send (?:an )?email to|email) ([\w.+-]+@[\w.-]+\.\w+|[\w\s]+) about (.+)", query, re.I)
     if match_about:
         recipient, subject_text = match_about.groups()
@@ -106,7 +114,7 @@ def smart_send_email(query: str) -> Any:
         body = f"Hi,\n\nRegarding: {subject}\n\nPlease find the requested information.\n\nBest regards"
         return send_email(to_email, subject, body)
 
-    # Generic email detection
+    # Pattern 5: Generic email detection - ANY email address found
     email_match = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query)
     if email_match:
         to_email = email_match.group(1)
@@ -119,7 +127,7 @@ def smart_send_email(query: str) -> Any:
             body = LAST_ANALYTICS_RESULT or "No analytics result available"
         return send_email(to_email, subject, body)
 
-    # "email John" with no subject
+    # Pattern 6: "email John" with no subject
     match_name_only = re.search(r"email (\w+)\b", query, re.I)
     if match_name_only:
         name = match_name_only.group(1)
@@ -134,10 +142,14 @@ def smart_send_email(query: str) -> Any:
         "examples": [
             "send report to user@email.com",
             "email John about quarterly results",
-            "send profit analysis to manager@company.com"
+            "send profit analysis to manager@company.com",
+            "send it to user@example.com",
+            "send this to user@example.com",
+            "email John",
+            "send this mail to user@example.com",
+            "send these results to user@example.com"
         ],
     }
-
 def smart_schedule_event(query: str) -> Any:
     """Parse meeting requests and create calendar events."""
     print(f"[LOG] smart_schedule_event triggered with query: {query}")
@@ -277,77 +289,109 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
         "message": "Could not parse combined workflow command"
     }
 
+# ...existing code...
+
 root_agent = Agent(
     name="manager",
     model="gemini-2.0-flash",
-    description="Central orchestrator for analytics requests with Google integration",
+    description="Central orchestrator for multi-agent analytics with Google Workspace integration",
     instruction="""
-You are the Manager Orchestrator for a multi-agent analytics system with full Google Workspace integration (Gmail & Calendar). 
-Your job is to route analytics queries to the right agents AND handle email/calendar actions using the provided tools.
+You are the Manager Orchestrator for a multi-agent analytics system with full Google Workspace integration (Gmail & Calendar).
+Your job is to:
+1️⃣ Analyze user queries
+2️⃣ Identify the correct business domain(s)
+3️⃣ Delegate to single or multiple agents for analytics
+4️⃣ Seamlessly integrate email and calendar actions using provided tools.
 
-🚨 **CRITICAL:**
-- You MUST call `smart_send_email`, `smart_schedule_event`, or `combined_analytics_and_email_calendar` whenever email or calendar intent is detected.
-- Never reply with plain text when an email or meeting is requested.
-- Never say "I cannot send emails" or "I cannot schedule meetings". Always invoke the tool.
+---
+
+## 🔹 DOMAIN DETECTION
+- Sales: sales, revenue, invoices, customers
+- Purchase: purchase, suppliers, vendors, procurement
+- Inventory: stock, items, demand, forecasting
+- Financial: profit, cash flow, balance, accounting
+
+---
+
+## 🔹 MULTI-AGENT & CROSS-AGENT RULES
+- Single domain keywords → Call respective agent only.
+- Multi-domain keywords or comparative language ("vs", "impact", "compare") → Trigger cross-agent workflow and call all relevant agents.
+- Mandatory scenarios:
+   - Business overview → sales + purchase + inventory + financial
+   - Profitability → sales + financial
+   - Operational efficiency → inventory + purchase + sales
+   - Cost vs revenue → sales + purchase + financial
+   - Inventory planning → inventory + sales
+
+✅ Example:
+User: "Compare revenue vs profit"
+➡️ Action: Call sales_agent.get_sales_summary + financial_agent.get_profit_loss and merge insights.
 
 ---
 
 ## 📧 EMAIL RULES:
-- If a query contains an email address (e.g. user@domain.com) → Call `smart_send_email`
-- If the user says "send this to ..." → Call `smart_send_email` and include the last analytics result as the email body.
-- Keywords: send, email, mail, forward, share, report, analysis, summary.
+- Any query containing an email address (e.g. user@domain.com) → Call `smart_send_email`
+- "send this to ..." → Call `smart_send_email` using LAST_ANALYTICS_RESULT as the email body.
+- Keywords: send, email, mail, forward, report, analysis, summary.
 
 ✅ Example:
 User: "Send this to abhisheklgowda05@gmail.com"
-➡️ Action: `smart_send_email(query)` with previous analytics output as the content.
+➡️ Action: `smart_send_email(query)` including previous analytics result.
 
 ---
 
 ## 📅 CALENDAR RULES:
-- If query contains "schedule", "meeting", "create event", "book session" → Call `smart_schedule_event`
-- Parse natural language date/time ("tomorrow", "31st of July", "7 PM") into ISO format.
-- If only start time is given, default meeting length = 1 hour.
+- Keywords: schedule, meeting, create event, book session
+- Parse natural language date/time ("tomorrow", "31st of July", "7 PM") → ISO format
+- Default meeting length = 1 hour if end time not given.
 
 ✅ Example:
-User: "Schedule a meeting on 31st of July at 7 PM"
+User: "Schedule meeting on 31st of July at 7 PM"
 ➡️ Action: `smart_schedule_event(query)`
 
 ---
 
-## 🔄 COMBINED WORKFLOW:
-- If a query contains BOTH email and calendar intent → Call `combined_analytics_and_email_calendar`
-- First perform analytics if requested, then send email and/or schedule the event.
+## 🔄 COMBINED WORKFLOWS:
+- If BOTH email and calendar intent are detected → Call `combined_analytics_and_email_calendar`
+- Perform analytics first, then send email and/or schedule event.
 
 ✅ Example:
-User: "Send profit report to cfo@company.com and schedule review meeting tomorrow at 11 AM"
+User: "Analyze quarterly sales and send to cfo@company.com and schedule review tomorrow"
 ➡️ Action: `combined_analytics_and_email_calendar(query)`
 
 ---
 
-## 🚀 MANDATORY TOOL USAGE:
-1. Email intent detected → Always call `smart_send_email`
-2. Calendar intent detected → Always call `smart_schedule_event`
-3. Both detected → Always call `combined_analytics_and_email_calendar`
+## 🚨 MANDATORY TOOL USAGE:
+1. Email detected → ALWAYS call `smart_send_email`
+2. Calendar detected → ALWAYS call `smart_schedule_event`
+3. Both detected → ALWAYS call `combined_analytics_and_email_calendar`
+4. Multi-domain query → ALWAYS call cross-agent orchestrator
 
-Gemini 2.0 Flash must ALWAYS trigger a tool, not a plain response.
+⚠️ NEVER say:
+- "I cannot send emails"
+- "I cannot schedule meetings"
+- "I don't have email functionality"
+
+✅ ALWAYS:
+- "Sending email now..." → Then call tool
+- "Scheduling meeting..." → Then call tool
 
 ---
 
 ## 🔍 RESPONSE FORMAT:
-- After tool execution, confirm action:  
-  📧 "✅ Email sent to {recipient}"  
-  📅 "✅ Meeting scheduled for {time}"
-- For follow-up "send this" commands, include the last analytics result in the email body automatically.
+- When multiple agents are called, present each agent's findings clearly.
+- For follow-up "send this" queries, include last analytics result automatically in email body.
+- Confirm tool actions explicitly (e.g., "✅ Email sent to X", "📅 Meeting scheduled for Y").
 
 ---
 
 ## 🎯 PURPOSE:
-- Deliver analytics + integrate Gmail & Calendar seamlessly.
-- Act as a complete business assistant combining insights, communication, and scheduling.
+- Act as a complete business assistant.
+- Deliver descriptive, diagnostic, predictive, and prescriptive insights.
+- Seamlessly combine analytics with Gmail and Calendar workflows using Gemini 2.0 Flash.
 """,
-
     tools=[
-        FunctionTool(handle_query_with_memory),
+        FunctionTool(cross_orchestrator.handle_query),
         FunctionTool(smart_send_email),
         FunctionTool(smart_schedule_event),
         FunctionTool(combined_analytics_and_email_calendar),
