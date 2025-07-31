@@ -33,16 +33,22 @@ except ImportError as e:
             "note": "Demo mode - Google credentials not configured"
         }
     
-    def create_event(title: str, start_time: str, end_time: str, description: str | None = None) -> dict:
-        return {
+    def create_event(
+        title: str, start_time: str, end_time: str, description: str | None = None
+    ) -> dict:
+        event = {
+
             "status": "demo_mode",
             "message": f"📅 Calendar event '{title}' would be created",
             "title": title,
             "start_time": start_time,
             "end_time": end_time,
-            "description": description,
-            "note": "Demo mode - Google credentials not configured"
+            "note": "Demo mode - Google credentials not configured",
+
         }
+        if description is not None:
+            event["description"] = description
+        return event
     
     GOOGLE_UTILS_AVAILABLE = False
 

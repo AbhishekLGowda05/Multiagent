@@ -28,22 +28,9 @@ def create_event(
     time_zone: str = "UTC",
     description: str | None = None,
 ) -> Any:
-    """Create a calendar event on the user's primary calendar.
 
-    Parameters
-    ----------
-    summary : str
-        Event title.
-    start_time : datetime | str
-        Event start time.
-    end_time : datetime | str
-        Event end time.
-    time_zone : str, optional
-        Time zone for the event, by default ``"UTC"``.
-    description : str | None, optional
-        Optional event description that will be included in the calendar
-        invitation.
-    """
+    """Create a calendar event on the user's primary calendar."""
+
     creds = get_credentials(CALENDAR_SCOPES)
     service = build("calendar", "v3", credentials=creds)
 
@@ -55,6 +42,8 @@ def create_event(
         "start": {"dateTime": start_iso, "timeZone": time_zone},
         "end": {"dateTime": end_iso, "timeZone": time_zone},
     }
+    if description is not None:
+        event["description"] = description
 
     if description:
         event["description"] = description
