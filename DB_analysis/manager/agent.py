@@ -313,13 +313,13 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
     """Handle queries that combine analytics with email and/or calendar actions."""
     results = {}
     
-    # Check if query contains both email and calendar actions
+    # Check if query contains email and/or calendar actions
     has_email = any(keyword in query.lower() for keyword in ["send", "email", "@"])
     has_calendar = any(keyword in query.lower() for keyword in ["schedule", "meeting", "calendar"])
     has_analysis = any(keyword in query.lower() for keyword in ["profit", "analysis", "report", "sales", "financial", "summary"])
-    
-    if has_analysis and (has_email or has_calendar):
-        # First perform analysis if requested
+
+    if has_email or has_calendar:
+        # Perform analysis only when explicitly requested
         if has_analysis:
             try:
                 analysis_result = cross_orchestrator.handle_query(query)
@@ -327,8 +327,8 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
                 results["analysis_status"] = "✅ Analysis completed successfully"
             except Exception as e:
                 results["analysis_error"] = f"❌ Analysis failed: {str(e)}"
-        
-        # Then handle email
+
+        # Handle email
         if has_email:
             try:
                 email_result = smart_send_email(query)
@@ -339,8 +339,8 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
                     results["email_status"] = "✅ Email sent successfully"
             except Exception as e:
                 results["email_error"] = f"❌ Email failed: {str(e)}"
-        
-        # Then handle calendar
+
+        # Handle calendar
         if has_calendar:
             try:
                 calendar_result = smart_schedule_event(query)
@@ -353,15 +353,15 @@ def combined_analytics_and_email_calendar(query: str) -> Any:
                     results["calendar_status"] = "✅ Calendar event scheduled successfully"
             except Exception as e:
                 results["calendar_error"] = f"❌ Calendar failed: {str(e)}"
-        
+
         # Summary message
         success_count = sum(1 for key in results.keys() if key.endswith("_status") and "✅" in results[key])
         total_actions = len([k for k in results.keys() if k.endswith("_status")])
-        
+
         results["summary"] = f"Workflow completed: {success_count}/{total_actions} actions successful"
-        
+
         return results
-    
+
     raise ValueError("Could not parse combined workflow command")
 
 root_agent = Agent(
