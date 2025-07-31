@@ -142,6 +142,8 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
     pattern5 = re.search(r"schedule (?:a )?meeting (?:with [\w\s]+)?on (\d{1,2})(?:st|nd|rd|th)? of (\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     # Pattern 6: Generic date pattern "schedule meeting [date] at [time]"
     pattern6 = re.search(r"schedule (?:a )?meeting.+?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(\w+) at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
+    # Pattern 7: Allow time before date e.g. "schedule meeting at 7 PM on 31st of July"
+    pattern7 = re.search(r"schedule (?:a )?meeting .*?at (\d+)(?::(\d+))?\s*(am|pm) on (\d{1,2})(?:st|nd|rd|th)?(?: of)? (\w+)", query, re.I)
     
     base_date = datetime.now()
     
@@ -219,13 +221,37 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
         if "sales" in query.lower():
             meeting_title = "Sales Review Meeting"
         
-        return create_event(
-            meeting_title,
-            start_time.isoformat() + "Z",
-            end_time.isoformat() + "Z",
-            description=description,
-        )
-    
+
+        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+
+    elif pattern7:
+        start_hour, start_min, start_period, day, month = pattern7.groups()
+
+        # Parse the specific date
+        month_num = parse_month(month)
+        day_num = int(day)
+        year = datetime.now().year
+
+        target_date = datetime(year, month_num, day_num)
+        if target_date < datetime.now():
+            target_date = datetime(year + 1, month_num, day_num)
+
+        # Parse time
+        start_hour = int(start_hour)
+        if start_period.lower() == "pm" and start_hour != 12:
+            start_hour += 12
+        elif start_period.lower() == "am" and start_hour == 12:
+            start_hour = 0
+
+        start_time = target_date.replace(hour=start_hour, minute=int(start_min or 0), second=0, microsecond=0)
+        end_time = start_time + timedelta(hours=1)
+
+        meeting_title = "Business Meeting"
+        if "sales" in query.lower():
+            meeting_title = "Sales Review Meeting"
+
+        return create_event(meeting_title, start_time.isoformat() + "Z", end_time.isoformat() + "Z")
+
     elif pattern3:
         day, start_hour, start_min, start_period, title = pattern3.groups()
         meeting_type = title
@@ -368,6 +394,7 @@ def smart_schedule_event(query: str, description: str | None = None) -> Any:
             "examples": [
                 "schedule meeting tomorrow at 2 PM",
                 "schedule meeting on 31st of July at 7 PM",
+                "schedule meeting at 7 PM on 31st of July",
                 "create meeting today from 10 AM to 11 AM"
             ]
         }
