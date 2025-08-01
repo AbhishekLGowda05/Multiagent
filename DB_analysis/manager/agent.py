@@ -154,8 +154,30 @@ def capture_sub_agent_result(result: str) -> str:
     return result
 
 # 🔹 FIXED: Email tool with proper pattern matching and enhanced debugging
-def smart_send_email(query: str) -> dict:
-    """Send email based on natural language query with memory of last analytics result."""
+def smart_send_email(
+    query: str,
+    analytics: dict | None = None,
+    *,
+    chart_b64: str | None = None,
+    pdf_bytes: bytes | None = None,
+    latex_mode: bool = False,
+) -> dict:
+    """Send an email based on the query and analytics data.
+
+    Parameters
+    ----------
+    query: str
+        Natural language command containing an email address.
+    analytics: dict, optional
+        Analytics results to include in the email body. If ``None`` the cached
+        ``LAST_ANALYTICS_RESULT`` is used.
+    chart_b64: str, optional
+        Base64 encoded image to embed in the email.
+    pdf_bytes: bytes, optional
+        PDF attachment content used when ``latex_mode`` is ``True``.
+    latex_mode: bool, optional
+        Attach the given PDF when ``True``.
+    """
     print(f"[DEBUG] ===== EMAIL FUNCTION CALLED =====")
     print(f"[DEBUG] Query: {query}")
     print(f"[DEBUG] LAST_ANALYTICS_RESULT length: {len(LAST_ANALYTICS_RESULT)}")
@@ -188,34 +210,58 @@ def smart_send_email(query: str) -> dict:
         print(f"[DEBUG] No email pattern matched")
         return {"status": "error", "message": "No email address found in query"}
     
-    # Use the stored result if available
-    if LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
-        body = LAST_ANALYTICS_RESULT
-        print(f"[DEBUG] Using stored analytics result, length: {len(body)}")
+    attachments = []
+
+    # Determine analytics data
+    data_source = "provided dict" if analytics is not None else "cache"
+    if analytics is None:
+        try:
+            analytics = json.loads(LAST_ANALYTICS_RESULT)
+            print("[DEBUG] Parsed cached analytics as JSON")
+        except Exception:
+            analytics = None
+
+    if analytics:
+        print(f"[DEBUG] Building HTML table from {data_source}")
+        set_last_analytics_result(json.dumps(analytics))
+        rows = []
+        for k, v in analytics.items():
+            rows.append(
+                f'<tr>'
+                f'<td style="border:1px solid #ccc;padding:4px;font-weight:bold">{k}</td>'
+                f'<td style="border:1px solid #ccc;padding:4px">{v}</td>'
+                f'</tr>'
+            )
+        table_html = (
+            '<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">'
+            + "".join(rows)
+            + "</table>"
+        )
+        body = f"<p>Business Analytics Results</p>{table_html}"
+    elif LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
+        body = f"<pre>{LAST_ANALYTICS_RESULT}</pre>"
     else:
-        # If no analytics result, provide a helpful message
-        body = """📊 BUSINESS ANALYSIS REPORT
-==============================
+        body = (
+            "<p><strong>No analytics data found.</strong> Run an analytics query before sending an email.</p>"
+        )
 
-This email was requested following your analytics query.
+    if chart_b64:
+        body += f'<p><img src="data:image/png;base64,{chart_b64}" style="max-width:600px;" /></p>'
 
-⚠️ Note: No analytics data was found in memory. 
-This could be because:
-1. No analytics query was run before this email request
-2. The analytics result was not properly captured
-
-Please try running an analytics query first (e.g., "get sales summary") 
-and then request the email again.
-
-==============================
-Sent from Business Analytics System"""
-        print(f"[DEBUG] Using fallback message")
+    if latex_mode and pdf_bytes:
+        attachments.append({"filename": "analytics.pdf", "mime_type": "application/pdf", "data": pdf_bytes})
     
     print(f"[DEBUG] Final email body length: {len(body)}")
     print(f"[DEBUG] Final email body preview: {body[:200]}...")
-    print(f"[DEBUG] Calling send_email function...")
-    
-    result = send_email(to_email, subject, body)
+    print(f"[DEBUG] Calling send_email function with {len(attachments)} attachments...")
+
+    result = send_email(
+        to_email,
+        subject,
+        body,
+        html=True,
+        attachments=attachments or None,
+    )
     print(f"[DEBUG] send_email result: {result}")
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
     
@@ -240,8 +286,12 @@ def smart_schedule_event(query: str) -> dict:
     # Pattern 4: "on 31st of July at 7pm" (existing but improved)
     pattern4 = re.search(r"on (\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(\w+)(?:\s+(\d{4}))?\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
-    # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
-    pattern5 = re.search(r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s+)?(\w+)(?:\s+(\d{4}))?", query, re.I)
+    # Pattern 5: "at 7pm on July 1st" or "at 7 PM on 1st of July"
+    pattern5 = re.search(
+        r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s*(?:of\s+)?)?(\w+)(?:\s+(\d{4}))?",
+        query,
+        re.I,
+    )
 
     def parse_month(month_str):
         """Helper function to parse month names to numbers."""
@@ -337,6 +387,9 @@ def smart_schedule_event(query: str) -> dict:
                 "schedule meeting at 7pm on 1st of July 2025"
             ]
         }
+
+    if start_time < base_date:
+        start_time = start_time.replace(year=start_time.year + 1)
 
     end_time = start_time + timedelta(hours=1)
     
