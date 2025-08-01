@@ -241,7 +241,11 @@ def smart_schedule_event(query: str) -> dict:
     pattern4 = re.search(r"on (\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(\w+)(?:\s+(\d{4}))?\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
     # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
-    pattern5 = re.search(r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s+)?(\w+)(?:\s+(\d{4}))?", query, re.I)
+    pattern5 = re.search(
+        r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+)?(\w+)(?:\s+(\d{4}))?",
+        query,
+        re.I,
+    )
 
     def parse_month(month_str):
         """Helper function to parse month names to numbers."""
@@ -328,7 +332,7 @@ def smart_schedule_event(query: str) -> dict:
     if start_time is None:
         print(f"[DEBUG] No patterns matched for query: {query}")
         return {
-            "status": "error", 
+            "status": "error",
             "message": "Could not parse meeting time. Please use format like 'schedule meeting at 7:00 PM on July 1, 2025'",
             "examples": [
                 "schedule meeting tomorrow at 2 PM",
@@ -337,6 +341,13 @@ def smart_schedule_event(query: str) -> dict:
                 "schedule meeting at 7pm on 1st of July 2025"
             ]
         }
+
+    if start_time < datetime.now():
+        try:
+            start_time = start_time.replace(year=start_time.year + 1)
+        except ValueError:
+            # handle February 29th on non-leap years
+            start_time = start_time + timedelta(days=365)
 
     end_time = start_time + timedelta(hours=1)
     

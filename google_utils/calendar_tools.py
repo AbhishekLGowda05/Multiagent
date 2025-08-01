@@ -27,6 +27,7 @@ def create_event(
     *,
     time_zone: str = "UTC",
     description: str | None = None,
+    recurrence: list[str] | None = None,
 ) -> Any:
 
     """Create a calendar event on the user's primary calendar."""
@@ -44,6 +45,8 @@ def create_event(
     }
     if description is not None:
         event["description"] = description
+    if recurrence is not None:
+        event["recurrence"] = recurrence
 
     if description:
         event["description"] = description
@@ -51,3 +54,12 @@ def create_event(
     result = service.events().insert(calendarId="primary", body=event).execute()
     print(f"📅 Created event '{summary}' from {start_iso} to {end_iso}")
     return result
+
+
+def delete_event(event_id: str) -> None:
+    """Delete a calendar event by id."""
+
+    creds = get_credentials(CALENDAR_SCOPES)
+    service = build("calendar", "v3", credentials=creds)
+    service.events().delete(calendarId="primary", eventId=event_id).execute()
+    print(f"🗑️ Deleted event id: {event_id}")
