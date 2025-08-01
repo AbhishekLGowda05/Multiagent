@@ -44,6 +44,7 @@ def create_event(
     *,
     time_zone: str = "UTC",
     description: str | None = None,
+    recurrence: str | list[str] | None = None,
 ) -> Any:
 
     """Create a calendar event on the user's primary calendar."""
@@ -62,49 +63,12 @@ def create_event(
     if description is not None:
         event["description"] = description
 
-    result = service.events().insert(calendarId="primary", body=event).execute()
-    print(f"📅 Created event '{summary}' from {start_iso} to {end_iso}")
-    return result
+    if recurrence is not None:
+        event["recurrence"] = (
+            recurrence if isinstance(recurrence, list) else [recurrence]
+        )
 
-
-def build_daily_rrule(start: datetime, end: datetime) -> str:
-    """Return an RRULE string for daily events between start and end dates."""
-    until = end.strftime("%Y%m%dT%H%M%SZ")
-    return f"RRULE:FREQ=DAILY;UNTIL={until}"
-
-
-def build_interval_rrule(interval_days: int, start: datetime, end: datetime) -> str:
-    """Return an RRULE string for events repeating every N days."""
-    until = end.strftime("%Y%m%dT%H%M%SZ")
-    return f"RRULE:FREQ=DAILY;INTERVAL={interval_days};UNTIL={until}"
-
-
-def create_recurring_event(
-    summary: str,
-    start_time: datetime | str,
-    end_time: datetime | str,
-    rrule: str,
-    *,
-    time_zone: str = "UTC",
-    description: str | None = None,
-) -> Any:
-    """Create a recurring event using an RRULE string."""
-
-    creds = get_credentials(CALENDAR_SCOPES)
-    service = build("calendar", "v3", credentials=creds)
-
-    start_iso = _to_iso(start_time)
-    end_iso = _to_iso(end_time)
-
-    event = {
-        "summary": summary,
-        "start": {"dateTime": start_iso, "timeZone": time_zone},
-        "end": {"dateTime": end_iso, "timeZone": time_zone},
-        "recurrence": [rrule],
-    }
-    if description is not None:
-        event["description"] = description
-
+    
     result = service.events().insert(calendarId="primary", body=event).execute()
     print(
         f"📅 Created recurring event '{summary}' from {start_iso} to {end_iso}"

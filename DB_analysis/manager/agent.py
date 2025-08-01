@@ -37,6 +37,76 @@ cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 # ✅ Memory for last analytics result
 LAST_ANALYTICS_RESULT: str = ""
 
+# Utility helpers for enhanced email output
+def generate_chart(data: list[float] | None = None, path: str = "chart.png") -> str:
+    """Create a simple chart from numeric data and return the file path."""
+    import matplotlib.pyplot as plt
+
+    values = data or [1, 2, 3, 4]
+    plt.figure()
+    plt.plot(range(1, len(values) + 1), values, marker="o")
+    plt.title("Analytics Chart")
+    plt.xlabel("Index")
+    plt.ylabel("Value")
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+    return path
+
+
+def _create_pdf(text: str, chart_path: str, pdf_path: str = "report.pdf") -> str:
+    """Generate a simple PDF containing text and an optional chart."""
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    with PdfPages(pdf_path) as pdf:
+        fig, ax = plt.subplots(figsize=(8.5, 11))
+        ax.axis("off")
+        ax.text(0.05, 0.95, text, va="top", wrap=True)
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        if os.path.exists(chart_path):
+            img = plt.imread(chart_path)
+            fig, ax = plt.subplots()
+            ax.imshow(img)
+            ax.axis("off")
+            pdf.savefig(fig)
+            plt.close(fig)
+    return pdf_path
+
+
+def _send_email_html(
+    to_email: str, subject: str, html_body: str, attachments: list[str] | None = None
+) -> Any:
+    """Send an HTML email with optional attachments using Gmail API."""
+    import base64
+    from email.mime.application import MIMEApplication
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    from googleapiclient.discovery import build
+    from google_utils.auth import get_credentials
+
+    creds = get_credentials(["https://www.googleapis.com/auth/gmail.send"])
+    service = build("gmail", "v1", credentials=creds)
+
+    message = MIMEMultipart()
+    message["To"] = to_email
+    message["From"] = "me"
+    message["Subject"] = subject
+    message.attach(MIMEText(html_body, "html"))
+
+    for path in attachments or []:
+        with open(path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=os.path.basename(path))
+        part["Content-Disposition"] = f"attachment; filename={os.path.basename(path)}"
+        message.attach(part)
+
+    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    create_message = {"raw": encoded_message}
+    return service.users().messages().send(userId="me", body=create_message).execute()
+
 def set_last_analytics_result(result):
     """Store analytics result in global memory with enhanced debugging."""
     global LAST_ANALYTICS_RESULT
@@ -201,72 +271,36 @@ def smart_send_email(query: str, analytics_data: dict | None = None) -> dict:
         print(f"[DEBUG] No email pattern matched")
         return {"status": "error", "message": "No email address found in query"}
     
-    attachments = []
-
-    # Determine analytics data
-    data_source = "provided dict" if analytics is not None else "cache"
-    if analytics is None:
-        try:
-            analytics = json.loads(LAST_ANALYTICS_RESULT)
-            print("[DEBUG] Parsed cached analytics as JSON")
-        except Exception:
-            analytics = None
-
-    if analytics:
-        print(f"[DEBUG] Building HTML table from {data_source}")
-        set_last_analytics_result(json.dumps(analytics))
-        rows = []
-        for k, v in analytics.items():
-            rows.append(
-                f'<tr>'
-                f'<td style="border:1px solid #ccc;padding:4px;font-weight:bold">{k}</td>'
-                f'<td style="border:1px solid #ccc;padding:4px">{v}</td>'
-                f'</tr>'
-            )
-        table_html = (
-            '<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">'
-            + "".join(rows)
-            + "</table>"
-        )
-        body = f"<p>Business Analytics Results</p>{table_html}"
-    elif LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
-        body = f"<pre>{LAST_ANALYTICS_RESULT}</pre>"
+    # Use the stored result if available
+    if LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
+        body_text = LAST_ANALYTICS_RESULT
+        print(f"[DEBUG] Using stored analytics result, length: {len(body_text)}")
     else:
-        body = (
-            "<p><strong>No analytics data found.</strong> Run an analytics query before sending an email.</p>"
+        # If no analytics result, provide a helpful message
+        body_text = (
+            "📊 BUSINESS ANALYSIS REPORT\n\nNo analytics data was found in memory."
         )
-
-    if chart_b64:
-        body += f'<p><img src="data:image/png;base64,{chart_b64}" style="max-width:600px;" /></p>'
-
-
-Sent from Business Analytics System"""
         print(f"[DEBUG] Using fallback message")
 
-    # Embed chart if analytics data provided
-    if analytics_data:
-        try:
-            chart_b64 = generate_chart(analytics_data)
-            body += f"\n\n<img src=\"data:image/png;base64,{chart_b64}\">"
-            print("[DEBUG] Chart embedded into email body")
-        except Exception as e:
-            print(f"[ERROR] Failed to generate chart: {e}")
+    chart_file = generate_chart()
+    attach_pdf = "pdf" in query.lower()
 
-    
-    print(f"[DEBUG] Final email body length: {len(body)}")
-    print(f"[DEBUG] Final email body preview: {body[:200]}...")
-    print(f"[DEBUG] Calling send_email function with {len(attachments)} attachments...")
+    html_body = f"<html><body><pre>{body_text}</pre><br><img src='cid:chart'></body></html>"
 
-    result = send_email(
-        to_email,
-        subject,
-        body,
-        html=True,
-        attachments=attachments or None,
-    )
+    attachments = [chart_file]
+    if attach_pdf:
+        pdf_path = _create_pdf(body_text, chart_file)
+        attachments.append(pdf_path)
+
+    print(f"[DEBUG] Final email body length: {len(html_body)}")
+    print(f"[DEBUG] Final email body preview: {html_body[:200]}...")
+    print(f"[DEBUG] Sending email with {len(attachments)} attachment(s)...")
+
+    result = _send_email_html(to_email, subject, html_body, attachments)
+
     print(f"[DEBUG] send_email result: {result}")
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
-    
+
     return result
 
 # 🔹 FIXED: Calendar tool with proper signature
@@ -399,13 +433,8 @@ def smart_schedule_event(query: str) -> dict:
             ]
         }
 
-    # Ensure the event is scheduled in the future
     if start_time < datetime.now():
-        try:
-            start_time = start_time.replace(year=start_time.year + 1)
-        except ValueError:
-            # handle February 29 on non-leap years
-            start_time = start_time + (datetime(start_time.year + 1, 3, 1) - datetime(start_time.year, 3, 1))
+        start_time = start_time.replace(year=start_time.year + 1)
 
 
     end_time = start_time + timedelta(hours=1)
@@ -426,8 +455,22 @@ def smart_schedule_event(query: str) -> dict:
     end_iso = end_time.isoformat() + "Z"
     
     print(f"[DEBUG] Creating event: {meeting_title} from {start_iso} to {end_iso}")
-    
-    return create_event(meeting_title, start_iso, end_iso)
+
+    recurrence = None
+    q_lower = query.lower()
+    if "daily" in q_lower or "every day" in q_lower:
+        recurrence = "RRULE:FREQ=DAILY"
+    elif "weekly" in q_lower or "every week" in q_lower:
+        recurrence = "RRULE:FREQ=WEEKLY"
+    elif "monthly" in q_lower or "every month" in q_lower:
+        recurrence = "RRULE:FREQ=MONTHLY"
+
+    if "recurrence" in create_event.__code__.co_varnames:
+        return create_event(
+            meeting_title, start_iso, end_iso, recurrence=recurrence
+        )
+    else:
+        return create_event(meeting_title, start_iso, end_iso)
 # 🔹 FIXED: Combined workflow tool
 def combined_analytics_and_email_calendar(query: str) -> dict:
     """Handle combined analytics + email + calendar workflows."""
