@@ -13,7 +13,15 @@ if project_root not in sys.path:
 
 # ✅ Import Google utilities (now will work inside ADK)
 from google_utils.gmail_tools import send_email
-from google_utils.calendar_tools import create_event
+from google_utils.calendar_tools import (
+    create_event,
+    create_recurring_event,
+    build_daily_rrule,
+    build_interval_rrule,
+)
+
+# Chart generation utility
+from visualization_utils import generate_chart
 
 # ✅ Import sub-agents
 from manager.sub_agents.sales_agent.agent import sales_agent
@@ -224,8 +232,13 @@ def capture_sub_agent_result(result: str) -> str:
     return result
 
 # 🔹 FIXED: Email tool with proper pattern matching and enhanced debugging
-def smart_send_email(query: str) -> dict:
-    """Send email based on natural language query with memory of last analytics result."""
+def smart_send_email(query: str, analytics_data: dict | None = None) -> dict:
+    """Send email based on natural language query with memory of last analytics result.
+
+    If ``analytics_data`` is provided, a chart of the data will be generated and
+    embedded into the email body as a base64 encoded ``<img>`` tag.
+
+    """
     print(f"[DEBUG] ===== EMAIL FUNCTION CALLED =====")
     print(f"[DEBUG] Query: {query}")
     print(f"[DEBUG] LAST_ANALYTICS_RESULT length: {len(LAST_ANALYTICS_RESULT)}")
@@ -284,6 +297,7 @@ def smart_send_email(query: str) -> dict:
     print(f"[DEBUG] Sending email with {len(attachments)} attachment(s)...")
 
     result = _send_email_html(to_email, subject, html_body, attachments)
+
     print(f"[DEBUG] send_email result: {result}")
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
 
@@ -311,6 +325,7 @@ def smart_schedule_event(query: str) -> dict:
     # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
     pattern5 = re.search(
         r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+)?(\w+)(?:\s+(\d{4}))?",
+
         query,
         re.I,
     )
@@ -350,6 +365,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 2: "July 1, 2025 at 7:00 PM"
     elif pattern2:
@@ -362,6 +379,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 3: "tomorrow at 3 PM"
     elif pattern3:
@@ -384,6 +403,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 5: "at 7pm on July 1st"
     elif pattern5:
@@ -396,6 +417,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
 
     if start_time is None:
         print(f"[DEBUG] No patterns matched for query: {query}")
@@ -412,6 +435,7 @@ def smart_schedule_event(query: str) -> dict:
 
     if start_time < datetime.now():
         start_time = start_time.replace(year=start_time.year + 1)
+
 
     end_time = start_time + timedelta(hours=1)
     

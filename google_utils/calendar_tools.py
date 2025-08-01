@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any
 from datetime import datetime, timezone
 
+try:
+    import dateparser  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    dateparser = None
+
 from googleapiclient.discovery import build
 
 from .auth import get_credentials
@@ -12,11 +17,23 @@ CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
 def _to_iso(dt: datetime | str) -> str:
-    """Convert a datetime or ISO string to an ISO 8601 string with UTC"""
+    """Convert a datetime or natural language string to an ISO 8601 string."""
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+    if isinstance(dt, str):
+        parsed = None
+        if dateparser:
+            try:
+                parsed = dateparser.parse(dt)
+            except Exception:
+                parsed = None
+        if parsed:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.isoformat()
     return dt
 
 
@@ -51,6 +68,10 @@ def create_event(
             recurrence if isinstance(recurrence, list) else [recurrence]
         )
 
+    
     result = service.events().insert(calendarId="primary", body=event).execute()
-    print(f"📅 Created event '{summary}' from {start_iso} to {end_iso}")
+    print(
+        f"📅 Created recurring event '{summary}' from {start_iso} to {end_iso}"
+    )
     return result
+
