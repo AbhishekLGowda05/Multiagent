@@ -27,6 +27,7 @@ def create_event(
     *,
     time_zone: str = "UTC",
     description: str | None = None,
+    recurrence: str | list[str] | None = None,
 ) -> Any:
 
     """Create a calendar event on the user's primary calendar."""
@@ -45,8 +46,10 @@ def create_event(
     if description is not None:
         event["description"] = description
 
-    if description:
-        event["description"] = description
+    if recurrence is not None:
+        event["recurrence"] = (
+            recurrence if isinstance(recurrence, list) else [recurrence]
+        )
 
     result = service.events().insert(calendarId="primary", body=event).execute()
     print(f"📅 Created event '{summary}' from {start_iso} to {end_iso}")
