@@ -220,6 +220,13 @@ source ../.venv/bin/activate
    database is stored elsewhere. When not set, each agent defaults to the
    `tallydb.db` file included in the project root.
 
+4. **Gmail and Calendar OAuth tokens**
+   - Download `credentials.json` from the Google Cloud console with Gmail and
+     Calendar APIs enabled.
+   - When you run any email or calendar tool for the first time, a browser will
+     open asking for permission. After authorizing, OAuth tokens are stored as
+     `token_*.pickle` files in the project root.
+
 ## Running the Example
 
 To run the multi-agent example:
@@ -274,6 +281,46 @@ see the orchestrator combine results from different agents:
 
 ```bash
 python cross_agent_example.py "Why did our profit drop if sales are stable?"
+```
+
+## FastAPI Endpoints
+
+You can also expose the agents over HTTP using FastAPI. Start the server with:
+
+```bash
+uvicorn api_routes:app --reload
+```
+
+### Endpoints
+
+- `GET /analysis/{query}` – Run an analytics query and return JSON.
+  ```bash
+  curl 'http://localhost:8000/analysis/Show%20sales%20trend'
+  ```
+- `POST /email` – Send an HTML email containing a chart.
+  ```bash
+  curl -X POST http://localhost:8000/email \
+       -H 'Content-Type: application/json' \
+       -d '{"to":"user@example.com","subject":"Report","html":"<h3>Report</h3><img src=\"cid:sales.png\">"}'
+  ```
+- `POST /schedule` – Create a calendar event.
+  ```bash
+  curl -X POST http://localhost:8000/schedule \
+       -H 'Content-Type: application/json' \
+       -d '{"title":"Review","start_time":"2024-08-01T10:00:00Z","end_time":"2024-08-01T11:00:00Z"}'
+  ```
+
+### HTML Email Example
+
+Invoking `/email` with HTML content produces rich mail:
+
+```html
+<html>
+  <body>
+    <h3>Sales Trend</h3>
+    <img src="cid:sales.png" alt="Sales Chart">
+  </body>
+</html>
 ```
 
 
