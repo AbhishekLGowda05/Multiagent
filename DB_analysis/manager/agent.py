@@ -13,7 +13,12 @@ if project_root not in sys.path:
 
 # ✅ Import Google utilities (now will work inside ADK)
 from google_utils.gmail_tools import send_email
-from google_utils.calendar_tools import create_event
+from google_utils.calendar_tools import (
+    create_event,
+    create_recurring_event,
+    build_daily_rrule,
+    build_interval_rrule,
+)
 
 # Chart generation utility
 from visualization_utils import generate_chart
@@ -162,6 +167,7 @@ def smart_send_email(query: str, analytics_data: dict | None = None) -> dict:
 
     If ``analytics_data`` is provided, a chart of the data will be generated and
     embedded into the email body as a base64 encoded ``<img>`` tag.
+
     """
     print(f"[DEBUG] ===== EMAIL FUNCTION CALLED =====")
     print(f"[DEBUG] Query: {query}")
@@ -195,26 +201,45 @@ def smart_send_email(query: str, analytics_data: dict | None = None) -> dict:
         print(f"[DEBUG] No email pattern matched")
         return {"status": "error", "message": "No email address found in query"}
     
-    # Use the stored result if available
-    if LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
-        body = LAST_ANALYTICS_RESULT
-        print(f"[DEBUG] Using stored analytics result, length: {len(body)}")
+    attachments = []
+
+    # Determine analytics data
+    data_source = "provided dict" if analytics is not None else "cache"
+    if analytics is None:
+        try:
+            analytics = json.loads(LAST_ANALYTICS_RESULT)
+            print("[DEBUG] Parsed cached analytics as JSON")
+        except Exception:
+            analytics = None
+
+    if analytics:
+        print(f"[DEBUG] Building HTML table from {data_source}")
+        set_last_analytics_result(json.dumps(analytics))
+        rows = []
+        for k, v in analytics.items():
+            rows.append(
+                f'<tr>'
+                f'<td style="border:1px solid #ccc;padding:4px;font-weight:bold">{k}</td>'
+                f'<td style="border:1px solid #ccc;padding:4px">{v}</td>'
+                f'</tr>'
+            )
+        table_html = (
+            '<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">'
+            + "".join(rows)
+            + "</table>"
+        )
+        body = f"<p>Business Analytics Results</p>{table_html}"
+    elif LAST_ANALYTICS_RESULT and len(LAST_ANALYTICS_RESULT.strip()) > 0:
+        body = f"<pre>{LAST_ANALYTICS_RESULT}</pre>"
     else:
-        # If no analytics result, provide a helpful message
-        body = """📊 BUSINESS ANALYSIS REPORT
-==============================
+        body = (
+            "<p><strong>No analytics data found.</strong> Run an analytics query before sending an email.</p>"
+        )
 
-This email was requested following your analytics query.
+    if chart_b64:
+        body += f'<p><img src="data:image/png;base64,{chart_b64}" style="max-width:600px;" /></p>'
 
-⚠️ Note: No analytics data was found in memory. 
-This could be because:
-1. No analytics query was run before this email request
-2. The analytics result was not properly captured
 
-Please try running an analytics query first (e.g., "get sales summary") 
-and then request the email again.
-
-==============================
 Sent from Business Analytics System"""
         print(f"[DEBUG] Using fallback message")
 
@@ -226,12 +251,19 @@ Sent from Business Analytics System"""
             print("[DEBUG] Chart embedded into email body")
         except Exception as e:
             print(f"[ERROR] Failed to generate chart: {e}")
+
     
     print(f"[DEBUG] Final email body length: {len(body)}")
     print(f"[DEBUG] Final email body preview: {body[:200]}...")
-    print(f"[DEBUG] Calling send_email function...")
-    
-    result = send_email(to_email, subject, body)
+    print(f"[DEBUG] Calling send_email function with {len(attachments)} attachments...")
+
+    result = send_email(
+        to_email,
+        subject,
+        body,
+        html=True,
+        attachments=attachments or None,
+    )
     print(f"[DEBUG] send_email result: {result}")
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
     
@@ -259,6 +291,7 @@ def smart_schedule_event(query: str) -> dict:
     # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
     pattern5 = re.search(
         r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+)?(\w+)(?:\s+(\d{4}))?",
+
         query,
         re.I,
     )
@@ -298,6 +331,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 2: "July 1, 2025 at 7:00 PM"
     elif pattern2:
@@ -310,6 +345,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 3: "tomorrow at 3 PM"
     elif pattern3:
@@ -332,6 +369,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 5: "at 7pm on July 1st"
     elif pattern5:
@@ -344,6 +383,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
 
     if start_time is None:
         print(f"[DEBUG] No patterns matched for query: {query}")
@@ -365,6 +406,7 @@ def smart_schedule_event(query: str) -> dict:
         except ValueError:
             # handle February 29 on non-leap years
             start_time = start_time + (datetime(start_time.year + 1, 3, 1) - datetime(start_time.year, 3, 1))
+
 
     end_time = start_time + timedelta(hours=1)
     
