@@ -13,7 +13,12 @@ if project_root not in sys.path:
 
 # ✅ Import Google utilities (now will work inside ADK)
 from google_utils.gmail_tools import send_email
-from google_utils.calendar_tools import create_event
+from google_utils.calendar_tools import (
+    create_event,
+    create_recurring_event,
+    build_daily_rrule,
+    build_interval_rrule,
+)
 
 # ✅ Import sub-agents
 from manager.sub_agents.sales_agent.agent import sales_agent
@@ -286,9 +291,10 @@ def smart_schedule_event(query: str) -> dict:
     # Pattern 4: "on 31st of July at 7pm" (existing but improved)
     pattern4 = re.search(r"on (\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(\w+)(?:\s+(\d{4}))?\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
-    # Pattern 5: "at 7pm on July 1st" or "at 7 PM on 1st of July"
+    # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
     pattern5 = re.search(
-        r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s*(?:of\s+)?)?(\w+)(?:\s+(\d{4}))?",
+        r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?)?(\w+)(?:\s+(\d{4}))?",
+
         query,
         re.I,
     )
@@ -328,6 +334,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 2: "July 1, 2025 at 7:00 PM"
     elif pattern2:
@@ -340,6 +348,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 3: "tomorrow at 3 PM"
     elif pattern3:
@@ -362,6 +372,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
         
     # Try Pattern 5: "at 7pm on July 1st"
     elif pattern5:
@@ -374,6 +386,8 @@ def smart_schedule_event(query: str) -> dict:
         hour, minute = parse_time(hour_str, minute_str, period)
         
         start_time = datetime(year, month, day, hour, minute)
+        if start_time < datetime.now():
+            start_time = start_time.replace(year=start_time.year + 1)
 
     if start_time is None:
         print(f"[DEBUG] No patterns matched for query: {query}")
