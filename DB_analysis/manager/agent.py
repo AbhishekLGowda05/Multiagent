@@ -317,18 +317,25 @@ def smart_schedule_event(query: str) -> dict:
     elif pattern5:
         hour_str, minute_str, period, day_str, month_str, year_str = pattern5.groups()
         print(f"[DEBUG] Pattern 5 matched: {pattern5.groups()}")
-        
+
         day = int(day_str or 1)
+        if month_str.lower() == "of":
+            alt = re.search(r"of\s+(\w+)(?:\s+(\d{4}))?", query, re.I)
+            if alt:
+                month_str = alt.group(1)
+                if not year_str:
+                    year_str = alt.group(2)
+
         month = parse_month(month_str)
         year = int(year_str) if year_str else datetime.now().year
         hour, minute = parse_time(hour_str, minute_str, period)
-        
+
         start_time = datetime(year, month, day, hour, minute)
 
     if start_time is None:
         print(f"[DEBUG] No patterns matched for query: {query}")
         return {
-            "status": "error", 
+            "status": "error",
             "message": "Could not parse meeting time. Please use format like 'schedule meeting at 7:00 PM on July 1, 2025'",
             "examples": [
                 "schedule meeting tomorrow at 2 PM",
@@ -337,6 +344,13 @@ def smart_schedule_event(query: str) -> dict:
                 "schedule meeting at 7pm on 1st of July 2025"
             ]
         }
+
+    # If no year was provided and the date has already passed, schedule for next year
+    if start_time < base_date:
+        try:
+            start_time = start_time.replace(year=start_time.year + 1)
+        except ValueError:
+            start_time = start_time + timedelta(days=365)
 
     end_time = start_time + timedelta(hours=1)
     
