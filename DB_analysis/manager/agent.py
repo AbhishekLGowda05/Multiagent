@@ -440,11 +440,11 @@ def smart_schedule_event(query: str) -> dict:
             ]
         }
 
-    # If no year was provided and the date has already passed, schedule for next year
-    if start_time < base_date:
+    if start_time < datetime.now():
         try:
             start_time = start_time.replace(year=start_time.year + 1)
         except ValueError:
+            # handle February 29th on non-leap years
             start_time = start_time + timedelta(days=365)
 
 
