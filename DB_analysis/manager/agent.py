@@ -15,6 +15,9 @@ if project_root not in sys.path:
 from google_utils.gmail_tools import send_email
 from google_utils.calendar_tools import create_event
 
+# Chart generation utility
+from visualization_utils import generate_chart
+
 # ✅ Import sub-agents
 from manager.sub_agents.sales_agent.agent import sales_agent
 from manager.sub_agents.greeting_agent.agent import greeting_agent
@@ -154,8 +157,12 @@ def capture_sub_agent_result(result: str) -> str:
     return result
 
 # 🔹 FIXED: Email tool with proper pattern matching and enhanced debugging
-def smart_send_email(query: str) -> dict:
-    """Send email based on natural language query with memory of last analytics result."""
+def smart_send_email(query: str, analytics_data: dict | None = None) -> dict:
+    """Send email based on natural language query with memory of last analytics result.
+
+    If ``analytics_data`` is provided, a chart of the data will be generated and
+    embedded into the email body as a base64 encoded ``<img>`` tag.
+    """
     print(f"[DEBUG] ===== EMAIL FUNCTION CALLED =====")
     print(f"[DEBUG] Query: {query}")
     print(f"[DEBUG] LAST_ANALYTICS_RESULT length: {len(LAST_ANALYTICS_RESULT)}")
@@ -210,6 +217,15 @@ and then request the email again.
 ==============================
 Sent from Business Analytics System"""
         print(f"[DEBUG] Using fallback message")
+
+    # Embed chart if analytics data provided
+    if analytics_data:
+        try:
+            chart_b64 = generate_chart(analytics_data)
+            body += f"\n\n<img src=\"data:image/png;base64,{chart_b64}\">"
+            print("[DEBUG] Chart embedded into email body")
+        except Exception as e:
+            print(f"[ERROR] Failed to generate chart: {e}")
     
     print(f"[DEBUG] Final email body length: {len(body)}")
     print(f"[DEBUG] Final email body preview: {body[:200]}...")
@@ -241,7 +257,11 @@ def smart_schedule_event(query: str) -> dict:
     pattern4 = re.search(r"on (\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(\w+)(?:\s+(\d{4}))?\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
     
     # Pattern 5: "at 7pm on July 1st" or "at 7:00PM on 1st July"
-    pattern5 = re.search(r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s+)?(\w+)(?:\s+(\d{4}))?", query, re.I)
+    pattern5 = re.search(
+        r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+)?(\w+)(?:\s+(\d{4}))?",
+        query,
+        re.I,
+    )
 
     def parse_month(month_str):
         """Helper function to parse month names to numbers."""
@@ -337,6 +357,14 @@ def smart_schedule_event(query: str) -> dict:
                 "schedule meeting at 7pm on 1st of July 2025"
             ]
         }
+
+    # Ensure the event is scheduled in the future
+    if start_time < datetime.now():
+        try:
+            start_time = start_time.replace(year=start_time.year + 1)
+        except ValueError:
+            # handle February 29 on non-leap years
+            start_time = start_time + (datetime(start_time.year + 1, 3, 1) - datetime(start_time.year, 3, 1))
 
     end_time = start_time + timedelta(hours=1)
     
