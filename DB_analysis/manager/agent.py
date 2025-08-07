@@ -210,19 +210,35 @@ def handle_cross_agent_query(query: str) -> str:
         
         # Format the result for display
         formatted_result = format_cross_agent_result(result, query)
-        
+
         # Capture the result for potential email use
         global LAST_ANALYTICS_RESULT, LAST_ANALYTICS_DATA
         LAST_ANALYTICS_RESULT = formatted_result
-        
+
         # Try to extract structured data if possible
         if isinstance(result, dict):
             LAST_ANALYTICS_DATA = result
         else:
             LAST_ANALYTICS_DATA = {"cross_agent_result": str(result)}
-        
+
         print(f"[DEBUG]  Cross-agent result captured for email use")
-        return formatted_result
+
+        # NEW: Detect direct email requests in the original query
+        email_status = ""
+        try:
+            if re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', query):
+                print(f"[DEBUG]  Email address detected - executing smart_send_email")
+                email_result = smart_send_email(query)
+                status = email_result.get('status', 'unknown')
+                message = email_result.get('message', '')
+                email_status = f"\nEmail Status: {status}"
+                if message:
+                    email_status += f" - {message}"
+        except Exception as email_error:
+            print(f"[DEBUG]  Email sending error: {email_error}")
+            email_status = f"\nEmail Error: {email_error}"
+
+        return formatted_result + email_status
         
     except Exception as e:
         error_msg = f"Error in cross-agent orchestration: {str(e)}"
