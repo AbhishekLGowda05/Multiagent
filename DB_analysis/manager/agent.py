@@ -1,26 +1,19 @@
 from google.adk.agents import Agent
 from google.adk.tools.function_tool import FunctionTool
-import os, sys, re, json, traceback, base64, random
+import os, sys, re, json
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from typing import Any
 
-#  Add Int-Assignment root path so google_utils is discoverable
+# ✅ Add Int-Assignment root path so google_utils is discoverable
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(current_dir, "../../"))  # Goes up to Int-Assignment
+project_root = os.path.abspath(os.path.join(current_dir, "../../"))  # Goes up to📌 **MANDATORY BEHAVIOR:**
 
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# Guard against unfinished YAML-based configurations
-for env_var in os.environ:
-    if "AGENT" in env_var and "YAML" in env_var:
-        raise RuntimeError(
-            f"YAML agent configuration via '{env_var}' is not supported; agents must be defined programmatically."
-        )
-
-#  Import Google utilities (now will work inside ADK)
-from google_utils.gmail_tools import send_email, read_emails
+# ✅ Import Google utilities (now will work inside ADK)
+from google_utils.gmail_tools import send_email
 from google_utils.calendar_tools import (
     create_event,
      create_recurring_event,
@@ -31,228 +24,20 @@ from google_utils.calendar_tools import (
 # Chart generation utility
 # from visualization_utils import generate_chart  # Comment out to use local version
 
-#  Import sub-agents (fixed import paths)
+# ✅ Import sub-agents (fixed import paths)
 from .sub_agents.sales_agent.agent import sales_agent
 from .sub_agents.greeting_agent.agent import greeting_agent
 from .sub_agents.purchase_agent.agent import purchase_agent
 from .sub_agents.inventory_agent.agent import inventory_agent
 from .sub_agents.financial_agent.agent import financial_agent
 
-#  Cross-agent orchestrator
+# ✅ Cross-agent orchestrator
 from .cross_agent_orchestrator import CrossAgentOrchestrator, DEFAULT_SPECS
 cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 
-#  Memory for last analytics result
+# ✅ Memory for last analytics result
 LAST_ANALYTICS_RESULT: str = ""
 LAST_ANALYTICS_DATA: dict = {}
-
-#  NEW: Query Preprocessor - classifies query types without executing tools
-def preprocess_query(query: str) -> str:
-    """
-    Lightweight preprocessor that identifies email or calendar requests.
-    Returns one of: "email", "calendar", or "normal".
-    """
-    print(f"[PREPROCESSOR] ===== QUERY INTERCEPTOR =====")
-    print(f"[PREPROCESSOR] Original query: {query}")
-
-    query_lower = query.lower().strip()
-
-    # Email detection patterns
-    email_patterns = [
-        ("send" in query_lower and ("mail" in query_lower or "email" in query_lower)),
-        ("@" in query and re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', query)),
-        ("mail this to" in query_lower),
-        ("forward to" in query_lower),
-        ("email this to" in query_lower),
-    ]
-
-    if any(email_patterns):
-        print(f"[PREPROCESSOR] Email pattern detected")
-        return "email"
-
-    # Calendar detection patterns
-    calendar_patterns = [
-        ("schedule" in query_lower and ("meeting" in query_lower or "event" in query_lower)),
-        ("create event" in query_lower),
-        ("book meeting" in query_lower),
-        ("add to calendar" in query_lower),
-    ]
-
-    if any(calendar_patterns):
-        print(f"[PREPROCESSOR] Calendar pattern detected")
-        return "calendar"
-
-    print(f"[PREPROCESSOR] No special patterns detected")
-    return "normal"
-
-#  NEW: Format cross-agent results for display
-def format_cross_agent_result(result: dict, query: str) -> str:
-    """
-    Format cross-agent orchestrator results into a human-readable response.
-    """
-    if not isinstance(result, dict):
-        return str(result)
-    
-    # Extract metadata
-    metadata = result.get("_metadata", {})
-    agents_triggered = metadata.get("agents_triggered", [])
-    execution_log = metadata.get("execution_log", [])
-    cross_analysis = metadata.get("cross_agent_analysis", {})
-    
-    # Build formatted response
-    lines = []
-    lines.append(f" CROSS-AGENT ANALYSIS: {query}")
-    lines.append("=" * 60)
-    
-    # Add agent results
-    for agent_name, agent_data in result.items():
-        if agent_name.startswith("_"):  # Skip metadata
-            continue
-            
-        lines.append(f"\n {agent_name.upper()} RESULTS:")
-        lines.append("-" * 30)
-        
-        for tool_name, tool_data in agent_data.items():
-            if isinstance(tool_data, dict):
-                if "error" in tool_data:
-                    lines.append(f" {tool_name}: {tool_data['error']}")
-                else:
-                    # Format tool results
-                    lines.append(f" {tool_name}:")
-                    for key, value in tool_data.items():
-                        if key not in ["error", "status"]:
-                            lines.append(f"    {key}: {value}")
-            else:
-                lines.append(f" {tool_name}: {tool_data}")
-    
-    # Add cross-agent insights
-    if cross_analysis:
-        lines.append(f"\n CROSS-DOMAIN INSIGHTS:")
-        lines.append("-" * 30)
-        
-        summary = cross_analysis.get("summary", "")
-        if summary:
-            lines.append(f" Summary: {summary}")
-            
-        key_findings = cross_analysis.get("key_findings", [])
-        if key_findings:
-            lines.append("\n Key Findings:")
-            for finding in key_findings[:5]:  # Limit to top 5
-                lines.append(f"    {finding}")
-        
-        recommendations = cross_analysis.get("recommendations", [])
-        if recommendations:
-            lines.append("\n Recommendations:")
-            for rec in recommendations[:3]:  # Limit to top 3
-                lines.append(f"    {rec}")
-    
-    lines.append("\n" + "=" * 60)
-    lines.append(f" Analysis completed across {len(agents_triggered)} business domains")
-    lines.append(f" Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    return "\n".join(lines)
-
-#  NEW: Cross-agent query handler
-def handle_cross_agent_query(query: str) -> str:
-    """
-    Handle queries that require coordination across multiple agents.
-    Uses the CrossAgentOrchestrator to determine which agents are needed.
-    """
-    print(f"[DEBUG] ===== CROSS-AGENT QUERY HANDLER =====")
-    print(f"[DEBUG] Query: {query}")
-    
-    try:
-        # Use orchestrator to handle the cross-agent query
-        result = cross_orchestrator.handle_query(query)
-        print(f"[DEBUG] Cross-agent orchestrator result: {str(result)[:200]}...")
-        
-        # Format the result for display
-        formatted_result = format_cross_agent_result(result, query)
-
-        # Capture the result for potential email use
-        global LAST_ANALYTICS_RESULT, LAST_ANALYTICS_DATA
-        LAST_ANALYTICS_RESULT = formatted_result
-
-        # Try to extract structured data if possible
-        if isinstance(result, dict):
-            LAST_ANALYTICS_DATA = result
-        else:
-            LAST_ANALYTICS_DATA = {"cross_agent_result": str(result)}
-
-        print(f"[DEBUG]  Cross-agent result captured for email use")
-
-        # NEW: Detect direct email requests in the original query
-        email_status = ""
-        try:
-            if re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', query):
-                print(f"[DEBUG]  Email address detected - executing smart_send_email")
-                email_result = smart_send_email(query)
-                status = email_result.get('status', 'unknown')
-                message = email_result.get('message', '')
-                email_status = f"\nEmail Status: {status}"
-                if message:
-                    email_status += f" - {message}"
-        except Exception as email_error:
-            print(f"[DEBUG]  Email sending error: {email_error}")
-            email_status = f"\nEmail Error: {email_error}"
-
-        return formatted_result + email_status
-        
-    except Exception as e:
-        error_msg = f"Error in cross-agent orchestration: {str(e)}"
-        print(f"[DEBUG]  Cross-agent error: {error_msg}")
-        return error_msg
-
-#  NEW: Detect if query needs multiple agents
-def is_cross_agent_query(query: str) -> bool:
-    """
-    Determine if a query requires coordination across multiple agents.
-    """
-    query_lower = query.lower()
-    
-    # Keywords that suggest cross-agent coordination is needed
-    cross_agent_indicators = [
-        # Comparison between domains
-        "compare", "comparison", "vs", "versus", "against",
-        
-        # Multi-domain keywords in single query
-        "sales and inventory", "sales and financial", "inventory and purchase",
-        "customers and payment", "revenue and stock", "profit and sales",
-        
-        # Analysis spanning domains
-        "top customers by sales volume with their payment",
-        "sales performance and inventory levels",
-        "revenue trends and purchase patterns",
-        "customer behavior and financial impact",
-        
-        # Cross-domain reports
-        "comprehensive report", "full analysis", "complete overview",
-        "business summary", "performance across"
-    ]
-    
-    # Multi-agent keyword combinations
-    agent_keywords = {
-        "sales": ["sales", "customer", "invoice", "revenue"],
-        "financial": ["financial", "profit", "expense", "payment", "cash"],
-        "inventory": ["inventory", "stock", "item", "product"],
-        "purchase": ["purchase", "vendor", "supplier", "buy"]
-    }
-    
-    # Check for cross-domain indicators
-    if any(indicator in query_lower for indicator in cross_agent_indicators):
-        return True
-    
-    # Check if query mentions keywords from multiple domains
-    domains_mentioned = 0
-    for domain, keywords in agent_keywords.items():
-        if any(keyword in query_lower for keyword in keywords):
-            domains_mentioned += 1
-    
-    # If 2+ domains mentioned, it's likely a cross-agent query
-    if domains_mentioned >= 2:
-        return True
-    
-    return False
 
 # Utility helpers for enhanced email output
 def generate_chart(analytics_data: dict = None, path: str = "chart.png") -> str:
@@ -283,57 +68,6 @@ def generate_chart(analytics_data: dict = None, path: str = "chart.png") -> str:
             plt.savefig(path, dpi=300, bbox_inches='tight')
             plt.close()
             
-        elif "profit_analysis" in analytics_data:
-            # Create profit analysis chart
-            categories = list(analytics_data["profit_analysis"].keys())
-            amounts = list(analytics_data["profit_analysis"].values())
-            
-            plt.figure(figsize=(10, 6))
-            colors = ['green' if cat == 'Profit' else 'red' if cat == 'Purchases' else 'blue' for cat in categories]
-            bars = plt.bar(categories, amounts, color=colors)
-            plt.title("Financial Analysis", fontsize=16, fontweight='bold')
-            plt.ylabel("Amount ($)")
-            plt.xticks(rotation=45)
-            
-            # Format y-axis to show currency
-            plt.ticklabel_format(style='plain', axis='y')
-            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-            
-            # Add value labels on bars
-            for bar in bars:
-                height = bar.get_height()
-                plt.text(bar.get_x() + bar.get_width()/2., height,
-                        f'${height:,.0f}', ha='center', va='bottom')
-            
-            plt.tight_layout()
-            plt.savefig(path, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-        elif "financial_comparison" in analytics_data:
-            # Create financial comparison chart (e.g., Cash Inflow vs Profit)
-            categories = list(analytics_data["financial_comparison"].keys())
-            amounts = list(analytics_data["financial_comparison"].values())
-            
-            plt.figure(figsize=(10, 6))
-            colors = ['#2E86AB', '#A23B72']  # Blue for Cash Inflow, Purple for Profit
-            bars = plt.bar(categories, amounts, color=colors)
-            plt.title("Financial Comparison", fontsize=16, fontweight='bold')
-            plt.ylabel("Amount ($)")
-            
-            # Format y-axis to show currency
-            plt.ticklabel_format(style='plain', axis='y')
-            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-            
-            # Add value labels on bars
-            for bar in bars:
-                height = bar.get_height()
-                plt.text(bar.get_x() + bar.get_width()/2., height,
-                        f'${height:,.0f}', ha='center', va='bottom')
-            
-            plt.tight_layout()
-            plt.savefig(path, dpi=300, bbox_inches='tight')
-            plt.close()
-        
         elif "financial_summary" in analytics_data:
             # Create financial chart
             categories = list(analytics_data["financial_summary"].keys())
@@ -348,106 +82,70 @@ def generate_chart(analytics_data: dict = None, path: str = "chart.png") -> str:
             plt.savefig(path, dpi=300, bbox_inches='tight')
             plt.close()
             
-        elif "monthly_sales" in analytics_data:
-            # Create monthly sales trend chart
-            months = list(analytics_data["monthly_sales"].keys())
-            amounts = list(analytics_data["monthly_sales"].values())
+        elif "inventory_levels" in analytics_data:
+            # Create inventory chart
+            items = list(analytics_data["inventory_levels"].keys())
+            stock = list(analytics_data["inventory_levels"].values())
             
-            plt.figure(figsize=(12, 8))
-            plt.plot(months, amounts, marker='o', linewidth=2, markersize=8, color='#2E86AB')
-            plt.fill_between(months, amounts, alpha=0.3, color='#2E86AB')
-            plt.title("Monthly Sales Trend", fontsize=16, fontweight='bold')
-            plt.xlabel("Month")
-            plt.ylabel("Sales Amount ($)")
-            plt.xticks(rotation=45)
-            
-            # Format y-axis to show currency
-            plt.ticklabel_format(style='plain', axis='y')
-            plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-            
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.savefig(path, dpi=300, bbox_inches='tight')
-            plt.close()
-        
-        else:
-            # Generic chart for any other analytics data
             plt.figure(figsize=(10, 6))
-            plt.text(0.5, 0.5, 'Analytics Chart\nData visualization available', 
-                    ha='center', va='center', fontsize=16, transform=plt.gca().transAxes)
-            plt.title("Analytics Report", fontsize=16, fontweight='bold')
-            plt.axis('off')
+            plt.bar(items, stock, color='skyblue')
+            plt.title("Current Inventory Levels", fontsize=16, fontweight='bold')
+            plt.xlabel("Items")
+            plt.ylabel("Stock Level")
+            plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             plt.savefig(path, dpi=300, bbox_inches='tight')
             plt.close()
-    
+            
+        else:
+            # Generic chart for other data types
+            keys = list(analytics_data.keys())[:5]  # Limit to 5 items
+            values = [analytics_data[k] for k in keys if isinstance(analytics_data[k], (int, float))]
+            
+            if values:
+                plt.figure(figsize=(10, 6))
+                plt.bar(keys[:len(values)], values, color='lightcoral')
+                plt.title("Analytics Data", fontsize=16, fontweight='bold')
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                plt.savefig(path, dpi=300, bbox_inches='tight')
+                plt.close()
+            else:
+                # Fallback to default chart
+                values = [1, 2, 3, 4]
+                plt.figure()
+                plt.plot(range(1, len(values) + 1), values, marker="o")
+                plt.title("Analytics Chart")
+                plt.xlabel("Index")
+                plt.ylabel("Value")
+                plt.tight_layout()
+                plt.savefig(path)
+                plt.close()
     else:
-        # No data provided, create a placeholder chart
-        plt.figure(figsize=(8, 6))
-        plt.text(0.5, 0.5, 'Chart not available\nNo analytics data provided', 
-                ha='center', va='center', fontsize=16, transform=plt.gca().transAxes)
-        plt.title("Analytics Report", fontsize=16, fontweight='bold')
-        plt.axis('off')
+        # Default chart when no analytics data
+        values = [1, 2, 3, 4]
+        plt.figure()
+        plt.plot(range(1, len(values) + 1), values, marker="o")
+        plt.title("Analytics Chart")
+        plt.xlabel("Index")
+        plt.ylabel("Value")
         plt.tight_layout()
-        plt.savefig(path, dpi=300, bbox_inches='tight')
+        plt.savefig(path)
         plt.close()
     
     return path
-
-
-def smart_generate_image(query: str) -> dict:
-    """Generate a chart image from the last analytics data or a placeholder.
-
-    The function checks the query for any graph/image intent keywords. It then
-    attempts to build a chart using ``LAST_ANALYTICS_DATA`` via ``generate_chart``.
-    When no analytics data exists, a placeholder image is produced instead. The
-    resulting image path and status metadata are returned.
-    """
-    print(f"[DEBUG] ===== IMAGE GENERATION FUNCTION CALLED =====")
-    print(f"[DEBUG] Query: {query}")
-
-    try:
-        keywords = ["chart", "graph", "plot", "image", "visual", "picture", "diagram"]
-        has_intent = any(k in query.lower() for k in keywords)
-
-        global LAST_ANALYTICS_DATA
-        data = LAST_ANALYTICS_DATA if LAST_ANALYTICS_DATA else None
-        path = "analytics_chart.png"
-
-        print(f"[DEBUG] Graph intent detected: {has_intent}")
-        print(f"[DEBUG] Using analytics data: {bool(data)}")
-
-        # ``generate_chart`` handles both real data and None (placeholder)
-        chart_path = generate_chart(data, path=path)
-
-        if os.path.exists(chart_path):
-            print(f"[DEBUG] Image generated at: {chart_path}")
-            return {"status": "success", "path": chart_path, "requested": has_intent}
-        else:
-            print(f"[ERROR] Chart path not found after generation: {chart_path}")
-            return {"status": "error", "message": "Chart generation failed"}
-
-    except Exception as e:
-        print(f"[ERROR] smart_generate_image failed: {e}")
-        return {"status": "error", "message": str(e)}
 
 
 def _create_pdf(text: str, chart_path: str, pdf_path: str = "report.pdf") -> str:
     """Generate a simple PDF containing text and an optional chart."""
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
-    import textwrap
 
     with PdfPages(pdf_path) as pdf:
         fig, ax = plt.subplots(figsize=(8.5, 11))
         ax.axis("off")
-        
-        # Wrap text manually since matplotlib doesn't support wrap=True
-        wrapped_text = textwrap.fill(text, width=80)
-        ax.text(0.05, 0.95, wrapped_text, va="top", ha="left", fontsize=10, 
-                transform=ax.transAxes)
-        
-        pdf.savefig(fig, bbox_inches='tight')
+        ax.text(0.05, 0.95, text, va="top", wrap=True)
+        pdf.savefig(fig)
         plt.close(fig)
 
         if os.path.exists(chart_path):
@@ -455,7 +153,7 @@ def _create_pdf(text: str, chart_path: str, pdf_path: str = "report.pdf") -> str
             fig, ax = plt.subplots()
             ax.imshow(img)
             ax.axis("off")
-            pdf.savefig(fig, bbox_inches='tight')
+            pdf.savefig(fig)
             plt.close(fig)
     return pdf_path
 
@@ -515,7 +213,7 @@ def set_last_analytics_result(result):
         print(f"[SUCCESS] LAST_ANALYTICS_RESULT stored successfully")
 
 
-#  NEW: Universal analytics detection and capture hook
+# 🔹 NEW: Universal analytics detection and capture hook
 def auto_detect_and_capture_analytics(response: str, query: str = "") -> str:
     """
     Universal hook to detect analytics responses and automatically capture them.
@@ -557,22 +255,18 @@ def auto_detect_and_capture_analytics(response: str, query: str = "") -> str:
     print(f"[DEBUG] Has data patterns: {has_data_patterns}")
     
     if contains_analytics or has_data_patterns:
-        print(f"[DEBUG]  ANALYTICS DETECTED - Auto-capturing response")
+        print(f"[DEBUG] 🎯 ANALYTICS DETECTED - Auto-capturing response")
         
         # Auto-format and store the response
         formatted_response = format_and_store_agent_response(str(response))
         
-        print(f"[DEBUG]  Analytics auto-capture completed")
+        print(f"[DEBUG] ✅ Analytics auto-capture completed")
         return response
     else:
-        print(f"[DEBUG]  No analytics detected - skipping auto-capture")
+        print(f"[DEBUG] ❌ No analytics detected - skipping auto-capture")
         return response
 
-# Remove or comment out the problematic line around line 294
-
-# Add this function after the existing capture_analytics_after_response function
-
-#  ENHANCED: Format agent response with improved regex patterns and analytics capture
+# 🔹 ENHANCED: Format agent response with improved regex patterns and analytics capture
 def format_and_store_agent_response(response: str) -> str:
     """Format agent response and store it for email use with robust data extraction."""
     print(f"[DEBUG] ===== FORMATTING AGENT RESPONSE =====")
@@ -584,65 +278,8 @@ def format_and_store_agent_response(response: str) -> str:
     analytics_data = {}
     response_str = str(response)
     
-    #  NEW: Handle JSON responses from sales agent
-    if "get_sales_summary_response" in response_str or "{" in response_str and "result" in response_str:
-        print(f"[DEBUG] Detected JSON response - attempting to parse and format")
-        try:
-            # Try to parse as JSON
-            if response_str.strip().startswith("{"):
-                json_data = json.loads(response_str)
-            else:
-                # Extract JSON from string if embedded
-                json_match = re.search(r'\{.*\}', response_str, re.DOTALL)
-                if json_match:
-                    json_data = json.loads(json_match.group())
-                else:
-                    json_data = None
-            
-            if json_data:
-                # Extract sales data from JSON
-                result_data = None
-                if "get_sales_summary_response" in json_data:
-                    result_data = json_data["get_sales_summary_response"]["result"]
-                elif "result" in json_data:
-                    result_data = json_data["result"]
-                    
-                if result_data:
-                    print(f"[DEBUG] Parsing JSON sales data: {result_data}")
-                    
-                    # Format top customers from JSON
-                    formatted_response = " SALES SUMMARY REPORT\n===============================\n\nTop Customers:\n\n"
-                    
-                    if "top_customers" in result_data:
-                        top_customers = {}
-                        for customer_data in result_data["top_customers"]:
-                            customer_name = customer_data[0]
-                            invoice_count = customer_data[1]
-                            formatted_response += f"{customer_name}: {invoice_count}\n"
-                            top_customers[customer_name] = invoice_count
-                        
-                        analytics_data["top_customers"] = top_customers
-                        print(f"[DEBUG] Extracted top customers from JSON: {top_customers}")
-                    
-                    # Add total invoices
-                    if "total_invoices" in result_data:
-                        formatted_response += f"\nTotal Invoices: {result_data['total_invoices']}"
-                    
-                    # Add voucher types
-                    if "voucher_types" in result_data and result_data["voucher_types"]:
-                        voucher_type = result_data["voucher_types"][0]
-                        formatted_response += f" Voucher Types: {voucher_type[0]} ({voucher_type[1]})"
-                    
-                    formatted_response += f"\n\n=====================================\nReport generated successfully \nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                    
-                    print(f"[DEBUG] Formatted JSON response into readable format")
-                    response_str = formatted_response  # Use the formatted version for further processing
-                    
-        except Exception as json_error:
-            print(f"[DEBUG] JSON parsing failed: {json_error}, treating as regular text")
-    
-    # Extract top customers data with flexible regex patterns (for non-JSON responses)
-    if not analytics_data and ("customer" in response_str.lower() or "invoice" in response_str.lower()):
+    # Extract top customers data with flexible regex patterns
+    if "customer" in response_str.lower() or "invoice" in response_str.lower():
         # Enhanced pattern to match multiple formats:
         # "BUDHAL CELL WORLD (25 invoices)", "RAVI ELECTRONICS: 10", "SAHANA CELLULAR - 9"
         customer_pattern = r"([A-Za-z0-9\s&]+)[(:|-]\s*(\d+)(?:\s*invoices?)?"
@@ -670,66 +307,17 @@ def format_and_store_agent_response(response: str) -> str:
                 print(f"[DEBUG] Created generic customer data from numbers: {analytics_data}")
     
     # Extract financial data with enhanced patterns
-    if any(word in response_str.lower() for word in ["revenue", "profit", "expense", "income", "financial", "sales drop", "sales trend", "monthly sales", "purchases", "profits drop", "cash inflow", "cash outflow", "inflow", "outflow"]):
+    if any(word in response_str.lower() for word in ["revenue", "profit", "expense", "income", "financial"]):
         # Enhanced financial pattern: "Revenue: $1000", "Profit - 500", "Expenses (200)"
-        # Also handle: "2023-08: 13,595,891.35", "2023-09: 9,454,054.5"
-        # Also handle: "profit in January was 8484745.49, with total purchases of 129428132.86"
-        # NEW: Handle "Cash inflow in September was 159553857.94, while the profit was 8484745.49"
-        
-        # Pattern 1: "Cash inflow was X, while profit was Y"
-        cash_profit_pattern = r"cash\s+inflow.*?was\s+([\d,.]+).*?profit.*?was\s+([\d,.]+)"
-        cash_profit_match = re.search(cash_profit_pattern, response_str, re.IGNORECASE)
-        if cash_profit_match:
-            cash_inflow, profit = cash_profit_match.groups()
-            # Clean up the numbers (remove commas and trailing periods)
-            cash_inflow = cash_inflow.rstrip('.').replace(',', '')
-            profit = profit.rstrip('.').replace(',', '')
-            analytics_data["financial_comparison"] = {
-                "Cash Inflow": float(cash_inflow),
-                "Profit": float(profit)
-            }
-            print(f"[DEBUG] Extracted cash inflow vs profit data: {analytics_data['financial_comparison']}")
-        
-        # Pattern 2: General financial pattern (only if we didn't find comparison data)
-        if not analytics_data.get("financial_comparison"):
-            financial_pattern = r"(revenue|profit|expense|income|sales|purchases?|2023-\d+|january|february|march|april|may|june|july|august|september|october|november|december)[:\s]+(?:was\s+|in\s+\w+\s+was\s+)?(\d+(?:,\d+)*(?:\.\d+)?)"
-            matches = re.findall(financial_pattern, response_str, re.IGNORECASE)
-            if matches:
-                financial_summary = {}
-                for category, amount in matches:
-                    # Clean up the category name
-                    if category.startswith("2023-"):
-                        category = f"Month {category}"  # Convert "2023-08" to "Month 2023-08"
-                    elif category.lower() in ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]:
-                        category = f"{category.title()} Data"
-                    financial_summary[category.title()] = float(amount.replace(',', ''))
-                if financial_summary:
-                    analytics_data["financial_summary"] = financial_summary
-                    print(f"[DEBUG] Extracted financial data: {financial_summary}")
-        
-        # Special pattern for profit analysis responses like your January example (only if no other data found)
-        if not analytics_data.get("financial_comparison") and not analytics_data.get("financial_summary"):
-            profit_analysis_pattern = r"profit.*?(\d+(?:,\d+)*(?:\.\d+)?).*?purchases.*?(\d+(?:,\d+)*(?:\.\d+)?).*?sales.*?(\d+(?:,\d+)*(?:\.\d+)?)"
-            profit_match = re.search(profit_analysis_pattern, response_str, re.IGNORECASE)
-            if profit_match:
-                profit, purchases, sales = profit_match.groups()
-                analytics_data["profit_analysis"] = {
-                    "Profit": float(profit.replace(',', '')),
-                    "Purchases": float(purchases.replace(',', '')),
-                    "Sales": float(sales.replace(',', ''))
-                }
-                print(f"[DEBUG] Extracted profit analysis data: {analytics_data['profit_analysis']}")
-        
-        # Also check for sales trend data in the format "2023-08: 13,595,891.35"
-        trend_pattern = r"(\d{4}-\d{2}):\s*([\d,]+\.?\d*)"
-        trend_matches = re.findall(trend_pattern, response_str)
-        if trend_matches:
-            monthly_sales = {}
-            for month, amount in trend_matches:
-                monthly_sales[month] = float(amount.replace(',', ''))
-            if monthly_sales:
-                analytics_data["monthly_sales"] = monthly_sales
-                print(f"[DEBUG] Extracted monthly sales data: {monthly_sales}")
+        financial_pattern = r"(revenue|profit|expense|income|sales)[:\-\(]\s*\$?(\d+(?:,\d+)*(?:\.\d+)?)"
+        matches = re.findall(financial_pattern, response_str, re.IGNORECASE)
+        if matches:
+            financial_summary = {}
+            for category, amount in matches:
+                financial_summary[category.title()] = float(amount.replace(',', ''))
+            if financial_summary:
+                analytics_data["financial_summary"] = financial_summary
+                print(f"[DEBUG] Extracted financial data: {financial_summary}")
     
     # Extract inventory data with enhanced patterns
     if any(word in response_str.lower() for word in ["inventory", "stock", "item", "product"]):
@@ -761,32 +349,28 @@ def format_and_store_agent_response(response: str) -> str:
     # Determine report type from the response content
     if any(word in response_str.lower() for word in ["sales", "invoice", "customer", "voucher"]):
         report_type = "SALES SUMMARY"
-        emoji = "[SALES]"
+        emoji = "📊"
     elif any(word in response_str.lower() for word in ["financial", "profit", "revenue", "expense"]):
         report_type = "FINANCIAL ANALYSIS"
-        emoji = "[FINANCIAL]"
+        emoji = "💰"
     elif any(word in response_str.lower() for word in ["inventory", "stock", "item"]):
         report_type = "INVENTORY ANALYSIS"
-        emoji = "[INVENTORY]"
+        emoji = "📦"
     elif any(word in response_str.lower() for word in ["purchase", "vendor", "supplier"]):
         report_type = "PURCHASE ANALYSIS"
-        emoji = "[PURCHASE]"
+        emoji = "🛒"
     else:
         report_type = "BUSINESS ANALYSIS"
-        emoji = "[BUSINESS]"
+        emoji = "📊"
     
     # Create formatted email body that matches ADK web display
-    # Use the formatted response_str if it was already formatted from JSON
-    if "Report generated successfully " in response_str:
-        formatted_result = response_str  # Already formatted
-    else:
-        formatted_result = f"""{emoji} {report_type} REPORT
+    formatted_result = f"""{emoji} {report_type} REPORT
 {'=' * (len(report_type) + 10)}
 
 {str(response)}
 
 {'=' * 40}
-Report generated successfully 
+Report generated successfully ✅
 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
     
     print(f"[DEBUG] Formatted result length: {len(formatted_result)}")
@@ -803,8 +387,73 @@ Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
     print(f"[DEBUG] ===== FORMATTING COMPLETED =====")
     return response
 
+# 🔹 ENHANCED: Direct analytics function that ensures capture and proper formatting
+def get_analytics_and_store(query: str) -> str:
+    """Store analytics query for delegation and format results for email use."""
+    print(f"[DEBUG] ===== ANALYTICS FUNCTION CALLED =====")
+    print(f"[DEBUG] Query: {query}")
+    
+    # Don't call sub-agents directly - let ADK handle delegation
+    # Instead, just format and store the query information
+    
+    # Determine report type for formatting
+    if "sales" in query.lower():
+        report_type = "SALES SUMMARY"
+        emoji = "📊"
+    elif "financial" in query.lower() or "profit" in query.lower():
+        report_type = "FINANCIAL ANALYSIS"
+        emoji = "💰"
+    elif "inventory" in query.lower():
+        report_type = "INVENTORY ANALYSIS"
+        emoji = "📦"
+    elif "purchase" in query.lower():
+        report_type = "PURCHASE ANALYSIS"
+        emoji = "🛒"
+    else:
+        report_type = "BUSINESS ANALYSIS"
+        emoji = "📊"
+    
+    print(f"[DEBUG] Report type determined: {report_type}")
+    
+    # Store query information temporarily - actual result will be captured after delegation
+    query_info = f"Analytics query received: {query}\nReport type: {report_type}\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    set_last_analytics_result(query_info)
+    
+    print(f"[DEBUG] Query info stored temporarily")
+    print(f"[DEBUG] ===== ANALYTICS FUNCTION COMPLETED =====")
+    
+    # Return the query to trigger normal ADK delegation
+    return query
 
-#  ENHANCED: Email tool with better debugging and manual analytics population
+# 🔹 SIMPLIFIED: Analytics capture function that hooks into responses
+def capture_analytics_after_response(query: str, response: str) -> str:
+    """
+    Simple function to capture analytics after getting a response from any agent.
+    This ensures LAST_ANALYTICS_RESULT is always populated for email functionality.
+    """
+    print(f"[DEBUG] ===== ANALYTICS CAPTURE HOOK =====")
+    print(f"[DEBUG] Query: {query}")
+    print(f"[DEBUG] Response preview: {str(response)[:200]}...")
+    
+    # Always call format_and_store for analytics queries
+    query_lower = query.lower()
+    is_analytics = any(keyword in query_lower for keyword in [
+        "sales", "customer", "invoice", "revenue", "financial", "profit", 
+        "inventory", "stock", "purchase", "vendor", "summary", "report"
+    ])
+    
+    if is_analytics:
+        print(f"[DEBUG] 🎯 Analytics query detected - capturing response")
+        format_and_store_agent_response(response)
+        print(f"[DEBUG] ✅ Analytics captured successfully")
+    else:
+        print(f"[DEBUG] Non-analytics query - skipping capture")
+    
+    print(f"[DEBUG] ===== CAPTURE HOOK COMPLETED =====")
+    return response
+
+# 🔹 FIXED: Email tool with proper pattern matching and enhanced debugging
+# Replace the smart_send_email function with this simplified version:
 
 def smart_send_email(query: str) -> dict:
     """Send email based on natural language query with memory of last analytics result."""
@@ -814,88 +463,71 @@ def smart_send_email(query: str) -> dict:
     print(f"[DEBUG] LAST_ANALYTICS_RESULT first 500 chars: {LAST_ANALYTICS_RESULT[:500]}")
     print(f"[DEBUG] LAST_ANALYTICS_RESULT type: {type(LAST_ANALYTICS_RESULT)}")
     
-    try:
-        # DEBUG: Check if analytics data is missing
-        if not LAST_ANALYTICS_RESULT or len(LAST_ANALYTICS_RESULT.strip()) == 0:
-            print(f"[DEBUG] No analytics data found - email will use placeholder data")
-            
-        # Extract multiple email addresses for multi-recipient support
-        pattern1 = re.search(r"(?:send|mail) (?:this|these|mail|email) to ([\w.+-@\s,]+)", query, re.I)
-        pattern2 = re.search(r"send (?:an )?email to ([\w.+-@\s,]+)", query, re.I)
-        pattern3 = re.search(r"send this mail to ([\w.+-@\s,]+)", query, re.I)  # New pattern for "send this mail to"
-        pattern4 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+    # Pattern 1: "send this to email@domain.com" or "mail this to email@domain.com"
+    pattern1 = re.search(r"(?:send|mail) (?:this|these results?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+    
+    # Pattern 2: "send email to email@domain.com" 
+    pattern2 = re.search(r"send (?:an )?email to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+    
+    # Pattern 3: Just find any email address in the query
+    pattern3 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query)
+    
+    to_email = None
+    if pattern1:
+        to_email = pattern1.group(1)
+        subject = "Business Analysis Results"
+        print(f"[DEBUG] Pattern 1 matched - Email: {to_email}")
+    elif pattern2:
+        to_email = pattern2.group(1)
+        subject = "Business Report"
+        print(f"[DEBUG] Pattern 2 matched - Email: {to_email}")
+    elif pattern3:
+        to_email = pattern3.group(1)
+        subject = "Analytics Report"
+        print(f"[DEBUG] Pattern 3 matched - Email: {to_email}")
+    else:
+        print(f"[DEBUG] No email pattern matched")
+        return {"status": "error", "message": "No email address found in query"}
+    
+    # 🚨 FAIL-SAFE CHECK: Ensure we have analytics data before sending
+    if not LAST_ANALYTICS_RESULT or len(LAST_ANALYTICS_RESULT.strip()) == 0:
+        error_msg = """❌ No analytics data captured!
         
-        email_addresses = []
-        if pattern1:
-            email_text = pattern1.group(1)
-            subject = "Business Analysis Results"
-            print(f"[DEBUG] Pattern 1 matched - Email text: {email_text}")
-        elif pattern2:
-            email_text = pattern2.group(1)
-            subject = "Business Report"
-            print(f"[DEBUG] Pattern 2 matched - Email text: {email_text}")
-        elif pattern3:
-            email_text = pattern3.group(1)
-            subject = "Business Analysis Results"
-            print(f"[DEBUG] Pattern 3 matched - Email text: {email_text}")
-        elif pattern4:
-            email_text = query
-            subject = "Analytics Report"
-            print(f"[DEBUG] Pattern 4 matched - Using entire query")
-        else:
-            email_text = query
-            subject = "Analytics Report"
-            print(f"[DEBUG] No pattern matched - Using entire query for email extraction")
-            
-        email_pattern = r"([\w.+-]+@[\w.-]+\.\w+)"
-        email_addresses = re.findall(email_pattern, email_text)
-        if not email_addresses:
-            print(f"[DEBUG] No email addresses found")
-            return {"status": "error", "message": "No email address found in query"}
-            
-        print(f"[DEBUG] Found {len(email_addresses)} email addresses: {email_addresses}")
-        
-        if not LAST_ANALYTICS_RESULT or len(LAST_ANALYTICS_RESULT.strip()) == 0:
-            error_msg = "No analytics data captured! To send a meaningful email with charts and data: 1. First run an analytics query (e.g., 'get sales summary', 'show top customers') 2. Then request the email again. Currently no analytics data is stored in memory."
-            print(f"[ERROR] {error_msg}")
-            return {"status": "error", "message": error_msg, "suggestion": "Please run an analytics query first, then retry the email request"}
-            
-        body_text = LAST_ANALYTICS_RESULT
-        print(f"[DEBUG] Using stored analytics result, length: {len(body_text)}")
-        
-        # Generate image using the new smart_generate_image tool
-        image_result = smart_generate_image(query)
-        chart_file = image_result.get("path")
-        has_chart = (
-            image_result.get("status") == "success"
-            and chart_file is not None
-            and os.path.exists(chart_file)
-        )
-        print(
-            f"[DEBUG] Image generation status: {image_result.get('status')}, path: {chart_file}"
-        )
+To send a meaningful email with charts and data:
+1. First run an analytics query (e.g., "get sales summary", "show top customers")
+2. Then request the email again
 
-        attach_pdf = "pdf" in query.lower()
+Currently no analytics data is stored in memory."""
         
-        # Create HTML email body - with or without chart
-        try:
-            # Chart section HTML - only include if we have a chart
-            chart_section = ""
-            if has_chart and chart_file and os.path.exists(chart_file):
-                chart_section = """
-    <div class="chart-container">
-        <h3 style="color: #555;"> Visual Analysis</h3>
-        <img src='cid:chart' alt="Analytics Chart" style="max-width: 100%; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-    </div>"""
-            else:
-                chart_section = """
-    <div class="chart-container">
-        <h3 style="color: #555;"> Analysis Report</h3>
-        <p style="color: #666; font-style: italic;">Chart visualization not available for this data type</p>
-    </div>"""
+        print(f"[ERROR] {error_msg}")
+        return {
+            "status": "error", 
+            "message": error_msg,
+            "suggestion": "Please run an analytics query first, then retry the email request"
+        }
+    
+    # Use the stored analytics result
+    body_text = LAST_ANALYTICS_RESULT
+    print(f"[DEBUG] Using stored analytics result, length: {len(body_text)}")
 
-            html_body = f"""<!DOCTYPE html>
-<html>
+    # Generate chart for visual enhancement using real analytics data
+    global LAST_ANALYTICS_DATA
+    
+    # 🚨 FAIL-SAFE CHECK: Ensure we have chart data
+    if not LAST_ANALYTICS_DATA or len(LAST_ANALYTICS_DATA) == 0:
+        print(f"[WARNING] No analytics data for charts - using fallback message")
+        # Don't send blank email - inform user about the issue
+        return {
+            "status": "error",
+            "message": "Analytics data was captured but chart data is missing. Please retry the analytics query and email request.",
+            "captured_text": body_text[:200] + "..." if len(body_text) > 200 else body_text
+        }
+    
+    chart_file = generate_chart(LAST_ANALYTICS_DATA, path="analytics_chart.png")
+    attach_pdf = "pdf" in query.lower()
+
+    # Create enhanced HTML email body with embedded chart
+    html_body = f"""<html>
 <head>
     <style>
         body {{
@@ -950,7 +582,11 @@ def smart_send_email(query: str) -> dict:
     <div class="content">
         <pre>{body_text}</pre>
     </div>
-    {chart_section}
+    
+    <div class="chart-container">
+        <h3 style="color: #555;">📊 Visual Analysis</h3>
+        <img src='cid:chart' alt="Analytics Chart" style="max-width: 100%; border-radius: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    </div>
     
     <div class="footer">
         Generated by Business Analytics System<br>
@@ -958,241 +594,28 @@ def smart_send_email(query: str) -> dict:
     </div>
 </body>
 </html>"""
-        except Exception as html_error:
-            print(f"[ERROR] HTML body generation failed: {html_error}")
-            return {"status": "error", "message": f"HTML body generation failed: {html_error}"}
-            
-        # Prepare attachments - only include chart if it exists
-        attachments = []
-        if has_chart and chart_file and os.path.exists(chart_file):
-            attachments.append(chart_file)
-            
-        if attach_pdf:
-            try:
-                pdf_path = _create_pdf(body_text, chart_file if has_chart else None)
-                attachments.append(pdf_path)
-            except Exception as pdf_error:
-                print(f"[ERROR] PDF generation failed: {pdf_error}")
-                return {"status": "error", "message": f"PDF generation failed: {pdf_error}"}
-                
-        print(f"[DEBUG] Final email body length: {len(html_body)}")
-        print(f"[DEBUG] Final email body preview: {html_body[:200]}...")
-        print(f"[DEBUG] Sending email to {len(email_addresses)} recipients with {len(attachments)} attachment(s)...")
-        print(f"[SUCCESS] Email contains analytics data - Chart available: {has_chart}")
-        
-        results = []
-        for to_email in email_addresses:
-            try:
-                print(f"[DEBUG] Attempting to send email to: {to_email}")
-                from google_utils.gmail_tools import send_email
-                print(f"[DEBUG] Gmail tools imported successfully")
-                simple_body = f"{subject}\n\n{body_text}\n\nGenerated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                
-                # Only attach chart if it exists
-                attachment_path = chart_file if (has_chart and chart_file and os.path.exists(chart_file)) else None
-                
-                result = send_email(
-                    to_email=to_email,
-                    subject=subject,
-                    body=simple_body,
-                    attachment_path=attachment_path
-                )
-                print(f"[DEBUG] Email sent to {to_email}, result: {result}")
-                results.append({"email": to_email, "status": "sent", "result": result})
-            except Exception as email_error:
-                print(f"[ERROR] Email processing failed to {to_email}: {str(email_error)}")
-                print(f"[ERROR] Email error type: {type(email_error)}")
-                print(f"[ERROR] Email error traceback: {traceback.format_exc()}")  # This line should work now
-                results.append({"email": to_email, "status": "error", "error": str(email_error)})
-                
-        print(f"[SUCCESS] Email sending completed - {len(results)} recipients processed")
+
+    attachments = [chart_file]
+    if attach_pdf:
+        pdf_path = _create_pdf(body_text, chart_file)
+        attachments.append(pdf_path)
+
+    print(f"[DEBUG] Final email body length: {len(html_body)}")
+    print(f"[DEBUG] Final email body preview: {html_body[:200]}...")
+    print(f"[DEBUG] Sending email with {len(attachments)} attachment(s)...")
+    print(f"[SUCCESS] Email contains real analytics data: {len(LAST_ANALYTICS_DATA)} data points")
+
+    try:
+        result = _send_email_html(to_email, subject, html_body, attachments)
+        print(f"[DEBUG] send_email result: {result}")
+        print(f"[SUCCESS] Email sent successfully with analytics data and charts")
         print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
-        return {"status": "completed", "recipients": len(email_addresses), "results": results, "message": f"Processed emails to {len(email_addresses)} recipients with analytics data and charts"}
-        
+        return result
     except Exception as e:
-        print(f"[ERROR] Critical error in smart_send_email: {str(e)}")
-        print(f"[ERROR] Error type: {type(e)}")
-        import traceback
-        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
-        return {"status": "error", "message": f"Email function failed with error: {str(e)}", "error_type": str(type(e)), "suggestion": "Check Google API credentials and email configuration"}
+        print(f"[ERROR] Email sending failed: {str(e)}")
+        return {"status": "error", "message": f"Failed to send email: {str(e)}"}
 
-
-#  NEW: Email reading functionality
-def smart_read_last_emails(count: int = 3) -> dict:
-    """Return the latest `count` emails from the inbox."""
-    print(f"[DEBUG] ===== EMAIL READ FUNCTION CALLED =====")
-
-    try:
-        import os
-
-        credentials_path = "./google_utils/credentials.json"
-        if os.getenv("MOCK_GOOGLE_APIS") == "true":
-            print(f"[DEBUG] Mock mode enabled - retrieving mock emails")
-            emails = read_emails(query="in:inbox")
-            return {"status": "success", "emails": emails[:count], "mode": "mock"}
-
-        if not os.path.exists(credentials_path):
-            print(f"[ERROR] Credentials not found at {credentials_path}")
-            return {
-                "status": "error",
-                "message": f"Google API credentials not found at {credentials_path}",
-                "suggestion": "Please ensure credentials.json exists in the google_utils folder",
-            }
-
-        print(f"[DEBUG] Fetching inbox emails from Gmail...")
-        emails = read_emails(query="in:inbox")
-        print(f"[DEBUG] Retrieved {len(emails)} emails")
-
-        return {"status": "success", "emails": emails[:count], "mode": "real"}
-
-    except Exception as e:
-        print(f"[ERROR] Email read failed: {str(e)}")
-        import traceback
-        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
-        return {
-            "status": "error",
-            "message": f"Failed to read emails: {str(e)}",
-            "error_type": str(type(e)),
-            "suggestion": "Check Google API credentials and Gmail permissions",
-        }
-
-
-#  ENHANCED: Email deletion functionality with better error handling
-def smart_delete_last_email() -> dict:
-    """Delete the last sent email from the user's account."""
-    print(f"[DEBUG] ===== EMAIL DELETION FUNCTION CALLED =====")
-    
-    try:
-        from google_utils.gmail_tools import read_emails, delete_email
-        import os
-        
-        # Check if running in mock mode first
-        credentials_path = "./google_utils/credentials.json"
-        if os.getenv("MOCK_GOOGLE_APIS") == "true":
-            print(f"[DEBUG] Mock mode enabled - simulating email deletion")
-            return {
-                "status": "success", 
-                "message": " [MOCK MODE] Successfully simulated deleting the last sent email.",
-                "email_id": "mock_email_deleted",
-                "mode": "mock"
-            }
-        
-        if not os.path.exists(credentials_path):
-            print(f"[ERROR] Credentials not found at {credentials_path}")
-            return {
-                "status": "error", 
-                "message": f"Google API credentials not found at {credentials_path}",
-                "suggestion": "Please ensure credentials.json exists in the google_utils folder"
-            }
-        
-        # Get the last sent email with more specific query
-        print(f"[DEBUG] Fetching sent emails from Gmail...")
-        sent_emails = read_emails(query="in:sent")
-        
-        if not sent_emails:
-            print(f"[DEBUG] No sent emails found")
-            return {"status": "error", "message": "No sent emails found to delete."}
-        
-        # Get the most recent email (first in the list)
-        last_email_id = sent_emails[0]['id']
-        print(f"[DEBUG] Found last email ID: {last_email_id}")
-        
-        # Attempt to delete the email
-        print(f"[DEBUG] Attempting to delete email ID: {last_email_id}")
-        delete_email(last_email_id)
-        
-        print(f"[DEBUG]  Successfully deleted email with ID: {last_email_id}")
-        return {
-            "status": "success", 
-            "message": f" Successfully deleted the last sent email (ID: {last_email_id}).",
-            "email_id": last_email_id,
-            "mode": "real"
-        }
-        
-    except Exception as e:
-        print(f"[ERROR] Email deletion failed: {str(e)}")
-        import traceback
-        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
-        return {
-            "status": "error", 
-            "message": f"Failed to delete the last email: {str(e)}",
-            "error_details": str(e),
-            "suggestion": "Check Google API credentials and Gmail permissions"
-        }
-
-
-#  NEW: Calendar deletion functionality  
-def smart_delete_calendar_events(query: str) -> dict:
-    """Delete calendar events based on natural language query."""
-    print(f"[DEBUG] ===== CALENDAR DELETION FUNCTION CALLED =====")
-    print(f"[DEBUG] Query: {query}")
-    
-    try:
-        from google_utils.calendar_tools import list_events, delete_event
-        
-        # Simple delete patterns
-        patterns = {
-            "today": r"delete.*(?:meeting|event).*(?:today|for today)",
-            "all_today": r"delete all.*(?:meeting|event).*today",
-            "last_meeting": r"delete (?:the )?last (?:meeting|event)",
-            "by_title": r"delete.*(?:meeting|event).*(?:called|named|titled)\s+['\"]([^'\"]+)['\"]"
-        }
-        
-        events = list_events(max_results=50)  # Get more events for better matching
-        deleted_count = 0
-        
-        for pattern_name, pattern in patterns.items():
-            match = re.search(pattern, query, re.I)
-            if match:
-                print(f"[DEBUG] Matched pattern: {pattern_name}")
-                
-                if pattern_name == "by_title":
-                    title_to_delete = match.group(1).lower()
-                    print(f"[DEBUG] Looking for events with title: {title_to_delete}")
-                    for event in events:
-                        if title_to_delete in event.get('summary', '').lower():
-                            delete_event(event['id'])
-                            deleted_count += 1
-                            print(f"[DEBUG] Deleted event: {event.get('summary', 'Untitled')}")
-                            
-                elif pattern_name in ["today", "all_today"]:
-                    target_date = datetime.now().date()
-                    print(f"[DEBUG] Looking for events on: {target_date}")
-                    for event in events:
-                        if 'start' in event and 'dateTime' in event['start']:
-                            event_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '')).date()
-                            if event_date == target_date:
-                                delete_event(event['id'])
-                                deleted_count += 1
-                                print(f"[DEBUG] Deleted today's event: {event.get('summary', 'Untitled')}")
-                                
-                elif pattern_name == "last_meeting":
-                    if events:
-                        last_event = events[0]  # Events are ordered by start time
-                        delete_event(last_event['id'])
-                        deleted_count += 1
-                        print(f"[DEBUG] Deleted last event: {last_event.get('summary', 'Untitled')}")
-                
-                break
-        
-        if deleted_count > 0:
-            return {
-                "status": "success",
-                "message": f" Successfully deleted {deleted_count} event(s)",
-                "deleted_count": deleted_count
-            }
-        else:
-            return {
-                "status": "error",
-                "message": "No matching events found to delete. Try: 'delete all meetings today' or 'delete last meeting'"
-            }
-            
-    except Exception as e:
-        print(f"[ERROR] Calendar event deletion failed: {str(e)}")
-        return {"status": "error", "message": f"Failed to delete calendar events: {str(e)}"}
-
-
-#  FIXED: Calendar tool with proper signature
+# 🔹 FIXED: Calendar tool with proper signature
 # Replace the smart_schedule_event function with this enhanced version:
 
 def smart_schedule_event(query: str) -> dict:
@@ -1496,9 +919,9 @@ def smart_schedule_event(query: str) -> dict:
         if is_recurring:
             # Use the new create_recurring_event function
             result = create_recurring_event(
-                meeting_title,
-                start_iso,
-                end_iso,
+                meeting_title, 
+                start_iso, 
+                end_iso, 
                 recurrence_rule,
                 description=f"Recurring meeting created from query: {query}"
             )
@@ -1507,212 +930,107 @@ def smart_schedule_event(query: str) -> dict:
             # Use the standard create_event function
             result = create_event(meeting_title, start_iso, end_iso)
             print(f"[DEBUG] Created one-time event successfully")
-
+            
         return result
-
+        
     except Exception as e:
         print(f"[ERROR] Calendar event creation failed: {str(e)}")
         return {"status": "error", "message": f"Failed to create calendar event: {str(e)}"}
 
+# 🔹 ROOT AGENT DEFINITION
 
-def smart_generate_image(prompt: str) -> dict:
-    """Create a simple image or chart from a text prompt and return the file path."""
-    print(f"[DEBUG] ===== IMAGE GENERATION CALLED =====")
-    print(f"[DEBUG] Prompt: {prompt}")
-
-    filename = f"generated_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-
-    try:
-        lower_prompt = prompt.lower()
-
-        # If prompt suggests a chart/graph, make a simple bar chart
-        if any(word in lower_prompt for word in ["chart", "graph", "plot"]):
-            data = [random.randint(1, 10) for _ in range(5)]
-            plt.figure()
-            plt.bar(range(len(data)), data)
-            plt.title(prompt)
-        else:
-            # Otherwise create a DALL·E-style placeholder image with text
-            plt.figure(figsize=(4, 4))
-            plt.text(0.5, 0.5, prompt, ha="center", va="center", wrap=True)
-            plt.axis("off")
-
-        plt.savefig(filename, bbox_inches="tight")
-        plt.close()
-
-        file_path = os.path.abspath(filename)
-        print(f"[DEBUG] Image generated at: {file_path}")
-        return {"status": "success", "path": file_path}
-
-    except Exception as e:
-        print(f"[ERROR] Image generation failed: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-#  NEW: Custom Agent Wrapper with Query Preprocessing
-class ManagerAgentWithPreprocessor(Agent):
-
-    """
-    Wrapper around the standard Agent that intercepts queries before LLM processing.
-    This ensures email/calendar requests are handled immediately without delegation.
-    """
-
-    def __init__(self, base_agent: Agent):
-        # Initialize the parent Agent class with base agent's properties but without sub_agents
-        # to avoid "already has a parent agent" validation error
-        super().__init__(
-            name=base_agent.name,
-            model=base_agent.model,
-            description=base_agent.description,
-            instruction=base_agent.instruction,
-            tools=base_agent.tools,
-            sub_agents=[]  # Empty sub_agents to avoid parent conflict
-        )
-        object.__setattr__(self, "_base_agent", base_agent)
-    
-    def run(self, query: str, **kwargs):
-        """Route queries to the proper handler or sub-agent."""
-        print(f"[MANAGER] ===== QUERY RECEIVED =====")
-        print(f"[MANAGER] Query: {query}")
-
-        # Step 1: Cross-agent detection
-        if is_cross_agent_query(query):
-            print(f"[MANAGER] Detected cross-agent query")
-            result = handle_cross_agent_query(query)
-            format_and_store_agent_response(result)
-            return result
-
-        # Step 2: Email/Calendar detection (requires prior analytics)
-        query_type = preprocess_query(query)
-        if LAST_ANALYTICS_RESULT:
-            if query_type == "email":
-                print(f"[MANAGER] Routing to smart_send_email")
-                return smart_send_email(query)
-            if query_type == "calendar":
-                print(f"[MANAGER] Routing to smart_schedule_event")
-                return smart_schedule_event(query)
-
-        # Step 3: Delegate to appropriate sub-agent
-        query_lower = query.lower()
-        if any(k in query_lower for k in ["sales", "invoice", "top customers"]):
-            agent_name = "sales_agent"
-        elif any(k in query_lower for k in ["purchase", "supplier", "vendor", "orders"]):
-            agent_name = "purchase_agent"
-        elif any(k in query_lower for k in ["stock", "inventory", "items", "restock"]):
-            agent_name = "inventory_agent"
-        elif any(k in query_lower for k in ["profit", "loss", "revenue", "balance", "income", "expenses"]):
-            agent_name = "financial_agent"
-        elif any(k in query_lower for k in ["hello", "hi", "introduce", "greetings"]):
-            agent_name = "greeting_agent"
-        else:
-            agent_name = "greeting_agent"
-
-        response = self.delegate_to_sub_agent(agent_name, query)
-        format_and_store_agent_response(response)
-        return response
-
-    async def run_async(self, query: str, **kwargs):
-        """Async wrapper around run for compatibility."""
-        result = self.run(query, **kwargs)
-
-        async def _async_gen():
-            yield result
-
-        return _async_gen()
-    
-    def delegate_to_sub_agent(self, agent_name: str, query: str):
-        """Custom delegation method to handle manually assigned sub_agents."""
-        sub_agents_map = {
-            'greeting_agent': 0,
-            'sales_agent': 1, 
-            'purchase_agent': 2,
-            'inventory_agent': 3,
-            'financial_agent': 4
-        }
-        
-        if agent_name in sub_agents_map and hasattr(self._base_agent, '_sub_agents'):
-            sub_agents = self._base_agent._sub_agents
-            agent_index = sub_agents_map[agent_name]
-            if agent_index < len(sub_agents):
-                target_agent = sub_agents[agent_index]
-                print(f"[MANAGER] Delegating to {agent_name}")
-                result = target_agent.run(query)
-                format_and_store_agent_response(str(result))
-                return result
-        
-        print(f"[MANAGER] Could not find sub-agent {agent_name}")
-        return f"Could not delegate to {agent_name}"
-    
-    def __getattr__(self, name: str):
-        """Delegate any other attributes to the base agent."""
-        return getattr(self._base_agent, name)
-
-    @property
-    def sub_agents(self):
-        """Access sub_agents from the base agent."""
-        # Access the manually assigned sub_agents
-        return getattr(self._base_agent, '_sub_agents', [])
-
-
-#  ROOT AGENT DEFINITION
-
-# ✅ Corrected root_agent creation with preprocessing wrapper
-base_manager_agent = Agent(
+root_agent = Agent(
     name="manager",
     model="gemini-2.0-flash", 
     description="Manager Orchestrator with multi-agent delegation + Gmail + Calendar tools",
-
     instruction="""
-You are the **manager agent** (root agent). You have Gmail + Calendar powers and can generate images or charts.
+You are the **Manager Orchestrator Agent**.  
+You are responsible for:
+✅ Delegating queries to the correct sub-agents  
+✅ Handling multi-domain analytics  
+✅ Sending emails via Gmail (using smart_send_email)  
+✅ Scheduling meetings in Google Calendar (using smart_schedule_event)  
 
- CROSS-AGENT DETECTION:
-If the query involves:
-- "compare" + ["sales" & "inventory", or "finance" & "purchase", etc.]
-- "customer behavior" + "payment patterns"
--> First call: is_cross_agent_query(query)
--> If true -> call: handle_cross_agent_query(query)
--> If false -> continue with single-agent delegation
+---
 
- DOMAIN-BASED DELEGATION:
+🚨 **CRITICAL ANALYTICS WORKFLOW:**  
+For ANY analytics query, you MUST follow this exact process:
 
-| Keywords                                                                 | Delegate to        |
-| ------------------------------------------------------------------------ | ------------------ |
-| "sales", "invoice", "top customers"                                     | sales_agent        |
-| "purchase", "supplier", "vendor", "orders"                              | purchase_agent     |
-| "stock", "inventory", "items", "restock"                                | inventory_agent    |
-| "profit", "loss", "revenue", "balance", "income", "expenses"            | financial_agent    |
-| "hello", "hi", "introduce", "greetings"                                 | greeting_agent     |
-| Unrecognized or fallback queries                                        | greeting_agent     |
+1️⃣ **ALWAYS delegate to the appropriate sub-agent FIRST**
+2️⃣ **IMMEDIATELY after getting the response**, call `capture_analytics_after_response(query, response)`
+3️⃣ This ensures analytics data is captured for email functionality
 
- CRITICAL: Always capture analytics responses for email functionality!
+🔹 **Analytics Queries** (sales, financial, inventory, purchase):
+   → Delegate to appropriate agent → `capture_analytics_after_response(query, response)`
 
- WORKFLOW:
-1. Is it a cross-agent query? -> handle_cross_agent_query()
-2. Otherwise -> Delegate to correct sub-agent
-3. Capture analytics responses with format_and_store_agent_response()
+🔹 **Email Queries** (send, mail, email):
+   → Call `smart_send_email(query)` (uses captured analytics automatically)
 
-Note: Email and calendar requests are handled by the preprocessor before reaching this agent.
-To view recent emails, call smart_read_last_emails(count=3) which returns the latest messages from your inbox.
-Use smart_generate_image(prompt) to create simple DALL·E-style images or graphs.
-""",
+🔹 **Calendar Queries** (schedule, meeting, event):
+   → Call `smart_schedule_event(query)`
+
+🔹 **Greetings** (hello, hi):
+   → Delegate to `greeting_agent` (no analytics capture needed)
+
+---
+
+🚨 **EMAIL HANDLING:**  
+If the query contains:  
+- Keywords like "send", "email", "mail", "forward"  
+- OR includes an email address (e.g., user@example.com)  
+
+→ Call: `smart_send_email(query)`  
+
+This will automatically use the stored analytics data from previous queries.
+
+---
+
+🚨 **CALENDAR HANDLING:**  
+If the query includes:
+- "schedule", "meeting", "event", "calendar"
+
+→ Call: `smart_schedule_event(query)`
+
+---
+
+📌 **CRITICAL EXAMPLES:**  
+
+✔️ User: "Get sales summary" 
+   → Delegate to `sales_agent` 
+   → `capture_analytics_after_response("Get sales summary", sales_response)`
+
+✔️ User: "Send this to john@company.com"
+   → `smart_send_email("Send this to john@company.com")` 
+   → (automatically uses previously captured analytics)
+
+✔️ User: "Hello"
+   → Delegate to `greeting_agent` (no capture needed)
+
+---
+
+� **MANDATORY RULES:**
+1. **ALWAYS** call `capture_analytics_after_response()` after ANY analytics delegation
+2. **NEVER** skip analytics capture for sales/financial/inventory/purchase queries  
+3. Email function will FAIL if no analytics data was captured - this prevents blank emails
+4. **ALWAYS** delegate to the correct sub-agent based on query domain
+5. **NEVER** say "I cannot send emails" - use `smart_send_email()` tool
+
+---
+
+🎯 **FAIL-SAFE EMAIL BEHAVIOR:**
+If user requests email but no analytics was captured, the email function will return an error asking them to run analytics first. This prevents sending blank emails with default charts.
+
+"""
+,
     tools=[
-        FunctionTool(handle_cross_agent_query),
-        FunctionTool(is_cross_agent_query),
-        FunctionTool(smart_send_email),
-        FunctionTool(smart_generate_image),
-        FunctionTool(smart_delete_last_email),
-        FunctionTool(smart_read_last_emails),
-        FunctionTool(smart_schedule_event),
-        FunctionTool(smart_generate_image),
+        FunctionTool(capture_analytics_after_response),
+        FunctionTool(get_analytics_and_store),
         FunctionTool(format_and_store_agent_response),
+        FunctionTool(smart_send_email),
+        FunctionTool(smart_schedule_event),
+        
     ],
-    sub_agents=[],  # Empty to avoid parent conflicts - will be set manually
+    sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
 )
 
-# ✅ Manually assign sub_agents to avoid parent conflicts
-base_manager_agent._sub_agents = [greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent]
 
-# ✅ Wrap it with preprocessor-aware manager
-root_agent = ManagerAgentWithPreprocessor(base_manager_agent)
-
-manager_agent = root_agent
