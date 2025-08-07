@@ -12,6 +12,13 @@ project_root = os.path.abspath(os.path.join(current_dir, "../../"))  # Goes up t
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Guard against unfinished YAML-based configurations
+for env_var in os.environ:
+    if "AGENT" in env_var and "YAML" in env_var:
+        raise RuntimeError(
+            f"YAML agent configuration via '{env_var}' is not supported; agents must be defined programmatically."
+        )
+
 #  Import Google utilities (now will work inside ADK)
 from google_utils.gmail_tools import send_email, read_emails
 from google_utils.calendar_tools import (
@@ -1680,4 +1687,5 @@ To view recent emails, call smart_read_last_emails(count=3) which returns the la
 
 # ✅ Wrap it with preprocessor-aware manager
 root_agent = ManagerAgentWithPreprocessor(base_manager_agent)
+
 manager_agent = root_agent
