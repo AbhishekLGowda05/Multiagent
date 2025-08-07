@@ -2,7 +2,7 @@ from google.adk.agents import Agent
 from google.adk.tools.function_tool import FunctionTool
 import os, sys, re, json
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 # ✅ Add Int-Assignment root path so google_utils is discoverable
@@ -20,6 +20,7 @@ from google_utils.calendar_tools import (
      build_daily_rrule,
      build_interval_rrule,
 )
+
 
 # Chart generation utility
 # from visualization_utils import generate_chart  # Comment out to use local version
@@ -464,30 +465,38 @@ def smart_send_email(query: str) -> dict:
     print(f"[DEBUG] LAST_ANALYTICS_RESULT type: {type(LAST_ANALYTICS_RESULT)}")
     
     # Pattern 1: "send this to email@domain.com" or "mail this to email@domain.com"
-    pattern1 = re.search(r"(?:send|mail) (?:this|these results?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
-    
-    # Pattern 2: "send email to email@domain.com" 
-    pattern2 = re.search(r"send (?:an )?email to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
-    
+    pattern1 = re.search(r"(?:send|mail) (?:this|these|mail|email) to ([\w.+-@\s,]+)", query, re.I)
+
+    # Pattern 2: "send email to email@domain.com"
+    pattern2 = re.search(r"send (?:an )?email to ([\w.+-@\s,]+)", query, re.I)
+
     # Pattern 3: Just find any email address in the query
-    pattern3 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query)
-    
-    to_email = None
+    pattern3 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+
+    email_text = None
     if pattern1:
-        to_email = pattern1.group(1)
+        email_text = pattern1.group(1)
         subject = "Business Analysis Results"
-        print(f"[DEBUG] Pattern 1 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 1 matched - Email text: {email_text}")
     elif pattern2:
-        to_email = pattern2.group(1)
+        email_text = pattern2.group(1)
         subject = "Business Report"
-        print(f"[DEBUG] Pattern 2 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 2 matched - Email text: {email_text}")
     elif pattern3:
-        to_email = pattern3.group(1)
+        email_text = query
         subject = "Analytics Report"
-        print(f"[DEBUG] Pattern 3 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 3 matched - Using entire query")
     else:
         print(f"[DEBUG] No email pattern matched")
         return {"status": "error", "message": "No email address found in query"}
+
+    # Extract all email addresses, allowing comma or whitespace separation
+    email_pattern = r"[\w.+-]+@[\w.-]+\.\w+"
+    recipients = re.findall(email_pattern, email_text)
+    print(f"[DEBUG] Extracted {len(recipients)} recipient(s): {recipients}")
+
+    if not recipients:
+        return {"status": "error", "message": "No valid email addresses found"}
     
     # 🚨 FAIL-SAFE CHECK: Ensure we have analytics data before sending
     if not LAST_ANALYTICS_RESULT or len(LAST_ANALYTICS_RESULT.strip()) == 0:
@@ -605,337 +614,19 @@ Currently no analytics data is stored in memory."""
     print(f"[DEBUG] Sending email with {len(attachments)} attachment(s)...")
     print(f"[SUCCESS] Email contains real analytics data: {len(LAST_ANALYTICS_DATA)} data points")
 
-    try:
-        result = _send_email_html(to_email, subject, html_body, attachments)
-        print(f"[DEBUG] send_email result: {result}")
-        print(f"[SUCCESS] Email sent successfully with analytics data and charts")
-        print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
-        return result
-    except Exception as e:
-        print(f"[ERROR] Email sending failed: {str(e)}")
-        return {"status": "error", "message": f"Failed to send email: {str(e)}"}
-
-# 🔹 FIXED: Calendar tool with proper signature
-# Replace the smart_schedule_event function with this enhanced version:
-
-def smart_schedule_event(query: str) -> dict:
-    """Schedule calendar event based on natural language query with recurring event support."""
-    print(f"[DEBUG] ===== CALENDAR FUNCTION CALLED =====")
-    print(f"[DEBUG] Query: {query}")
-    
-    base_date = datetime.now()
-    
-    # Enhanced pattern matching for recurring events
-    patterns = {
-        "daily_range": r"(?:set|schedule).*meeting.*from (\d+)(?:st|nd|rd|th)? (\w+) to (\d+)(?:st|nd|rd|th)? (\w+) at (\d+)(?::(\d+))?\s*(am|pm) every day",
-        "interval_pattern": r"(?:set|schedule).*meeting.*every (\d+)(?:st|nd|rd|th)? day in (\w+)",
-        "daily_recurring": r"(?:schedule|set).*meeting.*daily|every day.*at (\d+)(?::(\d+))?\s*(am|pm)",
-        "weekly_recurring": r"(?:schedule|set).*meeting.*weekly|every week.*at (\d+)(?::(\d+))?\s*(am|pm)",
-        # NEW: Enhanced patterns for month-specific recurring events
-        "everyday_in_month": r"(?:schedule|set).*meeting.*everyday.*at (\d+)(?::(\d+))?\s*(am|pm).*in (\w+)",
-        "every_nth_day_in_month": r"(?:schedule|set).*meeting.*every (\d+)(?:st|nd|rd|th)? day.*in (\w+)(?:.*at (\d+)(?::(\d+))?\s*(am|pm))?",
-        "daily_for_month": r"(?:schedule|set).*meeting.*at (\d+)(?::(\d+))?\s*(am|pm).*everyday.*in (\w+)",
-        # Standard patterns (existing)
-        "pattern1": r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?\s+of\s+)?(\w+)\s+(\d{1,2})(?:,\s*)?(\d{4})?",
-        "pattern2": r"(\w+)\s+(\d{1,2})(?:,\s*)?(\d{4})?\s+at\s+(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)",
-        "pattern3": r"(today|tomorrow) at (\d+)(?::(\d+))?\s*(am|pm)",
-        "pattern4": r"on (\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(\w+)(?:\s+(\d{4}))?\s+at\s+(\d+)(?::(\d+))?\s*(am|pm)",
-        "pattern5": r"at (\d{1,2})(?::(\d{1,2}))?\s*(am|pm) on (?:(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?\s+)?(\w+)(?:\s+(\d{4}))?"
-    }
-
-    def parse_month(month_str):
-        """Helper function to parse month names to numbers."""
-        months = {
-            'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
-            'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6,
-            'july': 7, 'jul': 7, 'august': 8, 'aug': 8, 'september': 9, 'sep': 9,
-            'october': 10, 'oct': 10, 'november': 11, 'nov': 11, 'december': 12, 'dec': 12
-        }
-        return months.get(month_str.lower(), datetime.now().month)
-
-    def parse_time(hour_str, minute_str, period_str):
-        """Helper function to parse time."""
-        hour = int(hour_str)
-        minute = int(minute_str or 0)
-        
-        if period_str.lower() == "pm" and hour != 12:
-            hour += 12
-        elif period_str.lower() == "am" and hour == 12:
-            hour = 0
-            
-        return hour, minute
-
-    start_time = None
-    is_recurring = False
-    recurrence_rule = None
-    
-    # Check for recurring patterns first
-    
-    # Pattern: "Set a meeting from 1st August to 7th August at 4 PM every day"
-    daily_range_match = re.search(patterns["daily_range"], query, re.I)
-    if daily_range_match:
-        start_day, start_month, end_day, end_month, hour_str, minute_str, period = daily_range_match.groups()
-        print(f"[DEBUG] Daily range pattern matched: {daily_range_match.groups()}")
-        
-        start_month_num = parse_month(start_month)
-        end_month_num = parse_month(end_month)
-        hour, minute = parse_time(hour_str, minute_str, period)
-        
-        year = datetime.now().year
-        start_time = datetime(year, start_month_num, int(start_day), hour, minute)
-        end_date = datetime(year, end_month_num, int(end_day), hour + 1, minute)  # +1 hour duration
-        
-        # Calculate number of days for daily recurrence
-        days_diff = (end_date - start_time).days + 1
-        recurrence_rule = build_daily_rrule(count=days_diff)
-        is_recurring = True
-        
-    # Pattern: "Set a meeting every 4th day in August"
-    elif re.search(patterns["interval_pattern"], query, re.I):
-        interval_match = re.search(patterns["interval_pattern"], query, re.I)
-        interval_days, month_str = interval_match.groups()
-        print(f"[DEBUG] Interval pattern matched: {interval_match.groups()}")
-        
-        month_num = parse_month(month_str)
-        year = datetime.now().year
-        
-        # Default to 2 PM if no time specified
-        hour, minute = 14, 0
-        time_match = re.search(r"at (\d+)(?::(\d+))?\s*(am|pm)", query, re.I)
-        if time_match:
-            hour, minute = parse_time(time_match.group(1), time_match.group(2), time_match.group(3))
-        
-        # Start on the first day of the month
-        start_time = datetime(year, month_num, 1, hour, minute)
-        
-        # Build interval rule for every Nth day
-        recurrence_rule = build_interval_rrule("DAILY", int(interval_days), count=10)
-        is_recurring = True
-        
-    # Pattern: "Schedule meeting daily at 3 PM" or "every day at 3 PM"
-    elif re.search(patterns["daily_recurring"], query, re.I):
-        daily_match = re.search(patterns["daily_recurring"], query, re.I)
-        hour_str, minute_str, period = daily_match.groups()
-        print(f"[DEBUG] Daily recurring pattern matched: {daily_match.groups()}")
-        
-        hour, minute = parse_time(hour_str, minute_str, period)
-        start_time = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        
-        # If time has passed today, start tomorrow
-        if start_time < datetime.now():
-            start_time += timedelta(days=1)
-            
-        recurrence_rule = build_daily_rrule(count=30)  # 30 days
-        is_recurring = True
-        
-    # Pattern: "Schedule meeting weekly at 3 PM" or "every week at 3 PM"
-    elif re.search(patterns["weekly_recurring"], query, re.I):
-        weekly_match = re.search(patterns["weekly_recurring"], query, re.I)
-        hour_str, minute_str, period = weekly_match.groups()
-        print(f"[DEBUG] Weekly recurring pattern matched: {weekly_match.groups()}")
-        
-        hour, minute = parse_time(hour_str, minute_str, period)
-        start_time = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        
-        # If time has passed today, start next week
-        if start_time < datetime.now():
-            start_time += timedelta(weeks=1)
-            
-        from google_utils.calendar_tools import build_weekly_rrule
-        recurrence_rule = build_weekly_rrule(count=12)  # 12 weeks
-        is_recurring = True
-    
-    # NEW: Pattern: "schedule meeting everyday at 7pm in August"
-    elif re.search(patterns["everyday_in_month"], query, re.I):
-        match = re.search(patterns["everyday_in_month"], query, re.I)
-        hour_str, minute_str, period, month_str = match.groups()
-        print(f"[DEBUG] Everyday in month pattern matched: {match.groups()}")
-        
-        hour, minute = parse_time(hour_str, minute_str, period)
-        month_num = parse_month(month_str)
-        year = datetime.now().year
-        
-        # Use the new function to create events for the entire month
-        from google_utils.calendar_tools import create_recurring_events_for_month
-        result = create_recurring_events_for_month(
-            "Daily Meeting", month_num, year, hour, minute, 
-            interval_days=1, description=f"Daily meeting scheduled for {month_str}"
-        )
-        print(f"[DEBUG] Created daily events for {month_str}")
-        return result
-    
-    # NEW: Pattern: "schedule meeting every 4th day in August"  
-    elif re.search(patterns["every_nth_day_in_month"], query, re.I):
-        match = re.search(patterns["every_nth_day_in_month"], query, re.I)
-        interval_str, month_str, hour_str, minute_str, period = match.groups()
-        print(f"[DEBUG] Every Nth day in month pattern matched: {match.groups()}")
-        
-        # Default time if not specified
-        if hour_str and period:
-            hour, minute = parse_time(hour_str, minute_str, period)
-        else:
-            hour, minute = 14, 0  # Default to 2 PM
-        
-        month_num = parse_month(month_str)
-        year = datetime.now().year
-        interval_days = int(interval_str)
-        
-        # Use the new function to create interval events for the month
-        from google_utils.calendar_tools import create_recurring_events_for_month
-        result = create_recurring_events_for_month(
-            f"Meeting (Every {interval_days} days)", month_num, year, hour, minute,
-            interval_days=interval_days, description=f"Meeting every {interval_days} days in {month_str}"
-        )
-        print(f"[DEBUG] Created every {interval_days} days events for {month_str}")
-        return result
-    
-    # NEW: Pattern: "schedule meeting at 7pm everyday in August" (alternative order)
-    elif re.search(patterns["daily_for_month"], query, re.I):
-        match = re.search(patterns["daily_for_month"], query, re.I)
-        hour_str, minute_str, period, month_str = match.groups()
-        print(f"[DEBUG] Daily for month pattern matched: {match.groups()}")
-        
-        hour, minute = parse_time(hour_str, minute_str, period)
-        month_num = parse_month(month_str)
-        year = datetime.now().year
-        
-        # Use the new function to create events for the entire month
-        from google_utils.calendar_tools import create_recurring_events_for_month
-        result = create_recurring_events_for_month(
-            "Daily Meeting", month_num, year, hour, minute,
-            interval_days=1, description=f"Daily meeting scheduled for {month_str}"
-        )
-        print(f"[DEBUG] Created daily events for {month_str}")
-        return result
-    
-    # If no recurring patterns matched, try standard one-time patterns
-    if not is_recurring:
-        # Try each standard pattern
-        for pattern_name, pattern in patterns.items():
-            if pattern_name in ["daily_range", "interval_pattern", "daily_recurring", "weekly_recurring"]:
-                continue  # Skip recurring patterns we already checked
-                
-            match = re.search(pattern, query, re.I)
-            if match:
-                print(f"[DEBUG] {pattern_name} matched: {match.groups()}")
-                
-                if pattern_name == "pattern1":  # "at 7pm on 1st of July 2024"
-                    hour_str, minute_str, period, day_str, month_str, day_alt, year_str = match.groups()
-                    day = int(day_str or day_alt or 1)
-                    month = parse_month(month_str)
-                    year = int(year_str) if year_str else datetime.now().year
-                    hour, minute = parse_time(hour_str, minute_str, period)
-                    start_time = datetime(year, month, day, hour, minute)
-                    
-                elif pattern_name == "pattern2":  # "July 1, 2025 at 7:00 PM"
-                    month_str, day_str, year_str, hour_str, minute_str, period = match.groups()
-                    day = int(day_str)
-                    month = parse_month(month_str)
-                    year = int(year_str) if year_str else datetime.now().year
-                    hour, minute = parse_time(hour_str, minute_str, period)
-                    start_time = datetime(year, month, day, hour, minute)
-                    
-                elif pattern_name == "pattern3":  # "tomorrow at 3 PM"
-                    day_word, hour_str, minute_str, period = match.groups()
-                    if day_word.lower() == "tomorrow":
-                        base_date += timedelta(days=1)
-                    hour, minute = parse_time(hour_str, minute_str, period)
-                    start_time = base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    
-                elif pattern_name == "pattern4":  # "on 31st of July at 7pm"
-                    day_str, month_str, year_str, hour_str, minute_str, period = match.groups()
-                    day = int(day_str)
-                    month = parse_month(month_str)
-                    year = int(year_str) if year_str else datetime.now().year
-                    hour, minute = parse_time(hour_str, minute_str, period)
-                    start_time = datetime(year, month, day, hour, minute)
-                    
-                elif pattern_name == "pattern5":  # "at 7pm on July 1st"
-                    hour_str, minute_str, period, day_str, month_str, year_str = match.groups()
-                    day = int(day_str or 1)
-                    if month_str.lower() == "of":
-                        alt = re.search(r"of\s+(\w+)(?:\s+(\d{4}))?", query, re.I)
-                        if alt:
-                            month_str = alt.group(1)
-                            if not year_str:
-                                year_str = alt.group(2)
-                    month = parse_month(month_str)
-                    year = int(year_str) if year_str else datetime.now().year
-                    hour, minute = parse_time(hour_str, minute_str, period)
-                    start_time = datetime(year, month, day, hour, minute)
-                
-                break
-
-    if start_time is None:
-        print(f"[DEBUG] No patterns matched for query: {query}")
-        return {
-            "status": "error",
-            "message": "Could not parse meeting time. Please use format like 'schedule meeting at 7:00 PM on July 1, 2025'",
-            "examples": [
-                "schedule meeting tomorrow at 2 PM",
-                "schedule meeting at 7:00 PM on July 1, 2025",
-                "schedule meeting on July 1st at 7 PM",
-                "schedule meeting at 7pm on 1st of July 2025",
-                "set a meeting from 1st August to 7th August at 4 PM every day",
-                "set a meeting every 4th day in August",
-                "schedule meeting everyday at 7pm in August",
-                "schedule meeting every 4th day in August at 2pm"
-            ]
-        }
-
-    # Adjust for past dates
-    if start_time < datetime.now():
+    results = []
+    for to_email in recipients:
         try:
-            start_time = start_time.replace(year=start_time.year + 1)
-        except ValueError:
-            # handle February 29th on non-leap years
-            start_time = start_time + timedelta(days=365)
+            print(f"[DEBUG] Sending to {to_email}")
+            result = _send_email_html(to_email, subject, html_body, attachments)
+            results.append({"email": to_email, "result": result})
+            print(f"[SUCCESS] Email sent to {to_email}")
+        except Exception as e:
+            print(f"[ERROR] Email sending failed for {to_email}: {str(e)}")
+            results.append({"email": to_email, "error": str(e)})
 
-    end_time = start_time + timedelta(hours=1)
-    
-    print(f"[DEBUG] Parsed time: {start_time} to {end_time}")
-    print(f"[DEBUG] Is recurring: {is_recurring}")
-    if is_recurring:
-        print(f"[DEBUG] Recurrence rule: {recurrence_rule}")
-    
-    # Determine meeting title from query
-    meeting_title = "Business Meeting"
-    if "sales" in query.lower():
-        meeting_title = "Sales Meeting"
-    elif "finance" in query.lower() or "financial" in query.lower():
-        meeting_title = "Financial Meeting"
-    elif "review" in query.lower():
-        meeting_title = "Review Meeting"
-    elif "product" in query.lower():
-        meeting_title = "Product Meeting"
-    
-    # Convert datetime objects to ISO format strings for the Google Calendar API
-    start_iso = start_time.isoformat() + "Z"
-    end_iso = end_time.isoformat() + "Z"
-    
-    print(f"[DEBUG] Creating event: {meeting_title} from {start_iso} to {end_iso}")
-
-    try:
-        if is_recurring:
-            # Use the new create_recurring_event function
-            result = create_recurring_event(
-                meeting_title, 
-                start_iso, 
-                end_iso, 
-                recurrence_rule,
-                description=f"Recurring meeting created from query: {query}"
-            )
-            print(f"[DEBUG] Created recurring event successfully")
-        else:
-            # Use the standard create_event function
-            result = create_event(meeting_title, start_iso, end_iso)
-            print(f"[DEBUG] Created one-time event successfully")
-            
-        return result
-        
-    except Exception as e:
-        print(f"[ERROR] Calendar event creation failed: {str(e)}")
-        return {"status": "error", "message": f"Failed to create calendar event: {str(e)}"}
+    print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
+    return {"status": "success", "recipients": recipients, "results": results}
 
 # 🔹 NEW: Read recent emails from Gmail inbox
 def smart_read_last_emails(count: int = 3) -> list[dict[str, str]]:
@@ -1013,8 +704,7 @@ For ANY analytics query, you MUST follow this exact process:
 🔹 **Analytics Queries** (sales, financial, inventory, purchase):
    → Delegate to appropriate agent → `capture_analytics_after_response(query, response)`
 
-🔹 **Email Queries** (send, mail, email):
-   → Call `smart_send_email(query)` (uses captured analytics automatically)
+
 
 🔹 **Calendar Queries** (schedule, meeting, event):
    → Call `smart_schedule_event(query)`
@@ -1078,6 +768,7 @@ If user requests email but no analytics was captured, the email function will re
 
 """
 ,
+
     tools=[
         FunctionTool(capture_analytics_after_response),
         FunctionTool(get_analytics_and_store),
@@ -1086,8 +777,7 @@ If user requests email but no analytics was captured, the email function will re
         FunctionTool(smart_schedule_event),
         FunctionTool(smart_read_last_emails),
 
+
     ],
     sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
 )
-
-

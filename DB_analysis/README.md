@@ -220,12 +220,12 @@ source ../.venv/bin/activate
    database is stored elsewhere. When not set, each agent defaults to the
    `tallydb.db` file included in the project root.
 
-4. **Gmail and Calendar OAuth tokens**
-   - Download `credentials.json` from the Google Cloud console with Gmail and
-     Calendar APIs enabled.
-   - When you run any email or calendar tool for the first time, a browser will
+4. **Gmail OAuth tokens**
+   - Download `credentials.json` from the Google Cloud console with the Gmail API enabled.
+   - When you run an email tool for the first time, a browser will
      open asking for permission. After authorizing, OAuth tokens are stored as
      `token_*.pickle` files in the project root.
+   - Meeting requests and calendar scheduling are not supported.
 
 ## Running the Example
 
@@ -302,12 +302,6 @@ uvicorn api_routes:app --reload
   curl -X POST http://localhost:8000/email \
        -H 'Content-Type: application/json' \
        -d '{"to":"user@example.com","subject":"Report","html":"<h3>Report</h3><img src=\"cid:sales.png\">"}'
-  ```
-- `POST /schedule` – Create a calendar event.
-  ```bash
-  curl -X POST http://localhost:8000/schedule \
-       -H 'Content-Type: application/json' \
-       -d '{"title":"Review","start_time":"2024-08-01T10:00:00Z","end_time":"2024-08-01T11:00:00Z"}'
   ```
 
 ### HTML Email Example
