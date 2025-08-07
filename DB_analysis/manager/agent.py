@@ -457,6 +457,43 @@ def generate_chart(analytics_data: dict = None, path: str = "chart.png") -> str:
     return path
 
 
+def smart_generate_image(query: str) -> dict:
+    """Generate a chart image from the last analytics data or a placeholder.
+
+    The function checks the query for any graph/image intent keywords. It then
+    attempts to build a chart using ``LAST_ANALYTICS_DATA`` via ``generate_chart``.
+    When no analytics data exists, a placeholder image is produced instead. The
+    resulting image path and status metadata are returned.
+    """
+    print(f"[DEBUG] ===== IMAGE GENERATION FUNCTION CALLED =====")
+    print(f"[DEBUG] Query: {query}")
+
+    try:
+        keywords = ["chart", "graph", "plot", "image", "visual", "picture", "diagram"]
+        has_intent = any(k in query.lower() for k in keywords)
+
+        global LAST_ANALYTICS_DATA
+        data = LAST_ANALYTICS_DATA if LAST_ANALYTICS_DATA else None
+        path = "analytics_chart.png"
+
+        print(f"[DEBUG] Graph intent detected: {has_intent}")
+        print(f"[DEBUG] Using analytics data: {bool(data)}")
+
+        # ``generate_chart`` handles both real data and None (placeholder)
+        chart_path = generate_chart(data, path=path)
+
+        if os.path.exists(chart_path):
+            print(f"[DEBUG] Image generated at: {chart_path}")
+            return {"status": "success", "path": chart_path, "requested": has_intent}
+        else:
+            print(f"[ERROR] Chart path not found after generation: {chart_path}")
+            return {"status": "error", "message": "Chart generation failed"}
+
+    except Exception as e:
+        print(f"[ERROR] smart_generate_image failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 def _create_pdf(text: str, chart_path: str, pdf_path: str = "report.pdf") -> str:
     """Generate a simple PDF containing text and an optional chart."""
     import matplotlib.pyplot as plt
@@ -965,25 +1002,18 @@ def smart_send_email(query: str) -> dict:
         body_text = LAST_ANALYTICS_RESULT
         print(f"[DEBUG] Using stored analytics result, length: {len(body_text)}")
         
-        global LAST_ANALYTICS_DATA
-        chart_file = None
-        has_chart = False
-        
-        # Try to generate chart if we have analytics data
-        if LAST_ANALYTICS_DATA and len(LAST_ANALYTICS_DATA) > 0:
-            print(f"[DEBUG] Generating chart with analytics data: {LAST_ANALYTICS_DATA}")
-            try:
-                chart_file = generate_chart(LAST_ANALYTICS_DATA, path="analytics_chart.png")
-                has_chart = True
-                print(f"[DEBUG] Chart generated successfully: {chart_file}")
-            except Exception as chart_error:
-                print(f"[WARNING] Chart generation failed: {chart_error}")
-                print(f"[DEBUG] Continuing without chart - email will still be sent")
-                has_chart = False
-        else:
-            print(f"[DEBUG] No analytics data for charts - sending email without chart")
-            has_chart = False
-            
+        # Generate image using the new smart_generate_image tool
+        image_result = smart_generate_image(query)
+        chart_file = image_result.get("path")
+        has_chart = (
+            image_result.get("status") == "success"
+            and chart_file is not None
+            and os.path.exists(chart_file)
+        )
+        print(
+            f"[DEBUG] Image generation status: {image_result.get('status')}, path: {chart_file}"
+        )
+
         attach_pdf = "pdf" in query.lower()
         
         # Create HTML email body - with or without chart
@@ -1762,6 +1792,7 @@ To view recent emails, call smart_read_last_emails(count=3) which returns the la
         FunctionTool(handle_cross_agent_query),
         FunctionTool(is_cross_agent_query),
         FunctionTool(smart_send_email),
+        FunctionTool(smart_generate_image),
         FunctionTool(smart_delete_last_email),
         FunctionTool(smart_read_last_emails),
         FunctionTool(format_and_store_agent_response),
