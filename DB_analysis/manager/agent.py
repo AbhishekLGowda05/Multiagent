@@ -1625,19 +1625,24 @@ def smart_schedule_event(query: str) -> dict:
 
 
 #  NEW: Custom Agent Wrapper with Query Preprocessing
-class ManagerAgentWithPreprocessor:
+class ManagerAgentWithPreprocessor(Agent):
     """
     Wrapper around the standard Agent that intercepts queries before LLM processing.
     This ensures email/calendar requests are handled immediately without delegation.
     """
     
     def __init__(self, base_agent: Agent):
+        # Initialize the parent Agent class with base agent's properties but without sub_agents
+        # to avoid "already has a parent agent" validation error
+        super().__init__(
+            name=base_agent.name,
+            model=base_agent.model,
+            description=base_agent.description,
+            instruction=base_agent.instruction,
+            tools=base_agent.tools,
+            sub_agents=[]  # Empty sub_agents to avoid parent conflict
+        )
         self.base_agent = base_agent
-        self.name = base_agent.name
-        self.model = base_agent.model
-        self.description = base_agent.description
-        self.tools = base_agent.tools
-        self.sub_agents = base_agent.sub_agents
     
     def run(self, query: str, **kwargs):
         """
@@ -1658,9 +1663,58 @@ class ManagerAgentWithPreprocessor:
         print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
         return self.base_agent.run(processed_query, **kwargs)
     
+    def run_async(self, query: str, **kwargs):
+        """
+        Async version for compatibility with ADK agents.
+        """
+        print(f"[MANAGER] ===== ASYNC QUERY RECEIVED =====")
+        print(f"[MANAGER] Query: {query}")
+        
+        # Step 1: Preprocess the query
+        processed_query, should_continue = preprocess_query(query)
+        
+        # Step 2: If preprocessor handled it, return the result directly
+        if not should_continue:
+            print(f"[MANAGER] Preprocessor handled the request directly")
+            # For async, we need to return an async generator for processed queries too
+            async def _return_processed():
+                yield processed_query
+            return _return_processed()
+        
+        # Step 3: Otherwise, continue to the base agent (LLM processing)
+        print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
+        return self.base_agent.run_async(processed_query, **kwargs)
+    
+    def delegate_to_sub_agent(self, agent_name: str, query: str):
+        """Custom delegation method to handle manually assigned sub_agents."""
+        sub_agents_map = {
+            'greeting_agent': 0,
+            'sales_agent': 1, 
+            'purchase_agent': 2,
+            'inventory_agent': 3,
+            'financial_agent': 4
+        }
+        
+        if agent_name in sub_agents_map and hasattr(self.base_agent, '_sub_agents'):
+            sub_agents = self.base_agent._sub_agents
+            agent_index = sub_agents_map[agent_name]
+            if agent_index < len(sub_agents):
+                target_agent = sub_agents[agent_index]
+                print(f"[MANAGER] Delegating to {agent_name}")
+                return target_agent.run(query)
+        
+        print(f"[MANAGER] Could not find sub-agent {agent_name}")
+        return f"Could not delegate to {agent_name}"
+    
     def __getattr__(self, name):
         """Delegate any other attributes to the base agent."""
         return getattr(self.base_agent, name)
+
+    @property
+    def sub_agents(self):
+        """Access sub_agents from the base agent."""
+        # Access the manually assigned sub_agents
+        return getattr(self.base_agent, '_sub_agents', [])
 
 
 #  ROOT AGENT DEFINITION
@@ -1711,8 +1765,11 @@ To view recent emails, call smart_read_last_emails(count=3) which returns the la
         FunctionTool(smart_read_last_emails),
         FunctionTool(format_and_store_agent_response),
     ],
-    sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
+    sub_agents=[],  # Empty to avoid parent conflicts - will be set manually
 )
+
+# ✅ Manually assign sub_agents to avoid parent conflicts
+base_manager_agent._sub_agents = [greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent]
 
 # ✅ Wrap it with preprocessor-aware manager
 root_agent = ManagerAgentWithPreprocessor(base_manager_agent)
