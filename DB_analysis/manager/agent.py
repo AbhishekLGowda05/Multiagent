@@ -13,7 +13,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # ✅ Import Google utilities (now will work inside ADK)
-from google_utils.gmail_tools import send_email
+from google_utils.gmail_tools import send_email, read_emails
 from google_utils.calendar_tools import (
     create_event,
      create_recurring_event,
@@ -937,6 +937,55 @@ def smart_schedule_event(query: str) -> dict:
         print(f"[ERROR] Calendar event creation failed: {str(e)}")
         return {"status": "error", "message": f"Failed to create calendar event: {str(e)}"}
 
+# 🔹 NEW: Read recent emails from Gmail inbox
+def smart_read_last_emails(count: int = 3) -> list[dict[str, str]]:
+    """Return the subject and snippet of the last `count` inbox emails."""
+    try:
+        # Attempt to use maxResults if supported
+        messages = read_emails(query="label:inbox", maxResults=count)
+    except TypeError:
+        # Fallback for older versions without maxResults
+        messages = read_emails("label:inbox")[:count]
+
+    results: list[dict[str, str]] = []
+
+    # Mock mode or missing credentials – return placeholder data
+    if os.getenv("MOCK_GOOGLE_APIS") == "true":
+        for i in range(min(count, len(messages))):
+            results.append(
+                {
+                    "subject": f"Mock email {i + 1}",
+                    "snippet": "This is a mock email snippet",
+                }
+            )
+        return results
+
+    try:
+        from googleapiclient.discovery import build
+        from google_utils.auth import get_credentials
+
+        creds = get_credentials(["https://www.googleapis.com/auth/gmail.readonly"])
+        service = build("gmail", "v1", credentials=creds)
+
+        for msg in messages[:count]:
+            detail = (
+                service.users()
+                .messages()
+                .get(userId="me", id=msg["id"], format="full")
+                .execute()
+            )
+            headers = detail.get("payload", {}).get("headers", [])
+            subject = next(
+                (h.get("value", "") for h in headers if h.get("name") == "Subject"),
+                "",
+            )
+            snippet = detail.get("snippet", "")
+            results.append({"subject": subject, "snippet": snippet})
+    except Exception as e:
+        print(f"[ERROR] smart_read_last_emails failed: {e}")
+
+    return results
+
 # 🔹 ROOT AGENT DEFINITION
 
 root_agent = Agent(
@@ -948,8 +997,9 @@ You are the **Manager Orchestrator Agent**.
 You are responsible for:
 ✅ Delegating queries to the correct sub-agents  
 ✅ Handling multi-domain analytics  
-✅ Sending emails via Gmail (using smart_send_email)  
-✅ Scheduling meetings in Google Calendar (using smart_schedule_event)  
+✅ Sending emails via Gmail (using smart_send_email)
+✅ Scheduling meetings in Google Calendar (using smart_schedule_event)
+✅ Reading recent emails (using smart_read_last_emails)
 
 ---
 
@@ -968,6 +1018,9 @@ For ANY analytics query, you MUST follow this exact process:
 
 🔹 **Calendar Queries** (schedule, meeting, event):
    → Call `smart_schedule_event(query)`
+
+🔹 **Inbox Queries** (read, inbox, emails):
+   → Call `smart_read_last_emails(count)` (defaults to 3)
 
 🔹 **Greetings** (hello, hi):
    → Delegate to `greeting_agent` (no analytics capture needed)
@@ -1000,11 +1053,14 @@ If the query includes:
    → `capture_analytics_after_response("Get sales summary", sales_response)`
 
 ✔️ User: "Send this to john@company.com"
-   → `smart_send_email("Send this to john@company.com")` 
+   → `smart_send_email("Send this to john@company.com")`
    → (automatically uses previously captured analytics)
 
 ✔️ User: "Hello"
    → Delegate to `greeting_agent` (no capture needed)
+
+✔️ User: "Read my last 3 emails"
+   → `smart_read_last_emails(count=3)`
 
 ---
 
@@ -1028,7 +1084,8 @@ If user requests email but no analytics was captured, the email function will re
         FunctionTool(format_and_store_agent_response),
         FunctionTool(smart_send_email),
         FunctionTool(smart_schedule_event),
-        
+        FunctionTool(smart_read_last_emails),
+
     ],
     sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
 )
