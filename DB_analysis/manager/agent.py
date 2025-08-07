@@ -13,7 +13,14 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # ✅ Import Google utilities (now will work inside ADK)
-from google_utils.gmail_tools import send_email
+from google_utils.gmail_tools import send_email, read_emails
+from google_utils.calendar_tools import (
+    create_event,
+     create_recurring_event,
+     build_daily_rrule,
+     build_interval_rrule,
+)
+
 
 # Chart generation utility
 # from visualization_utils import generate_chart  # Comment out to use local version
@@ -621,29 +628,156 @@ Currently no analytics data is stored in memory."""
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
     return {"status": "success", "recipients": recipients, "results": results}
 
+# 🔹 NEW: Read recent emails from Gmail inbox
+def smart_read_last_emails(count: int = 3) -> list[dict[str, str]]:
+    """Return the subject and snippet of the last `count` inbox emails."""
+    try:
+        # Attempt to use maxResults if supported
+        messages = read_emails(query="label:inbox", maxResults=count)
+    except TypeError:
+        # Fallback for older versions without maxResults
+        messages = read_emails("label:inbox")[:count]
+
+    results: list[dict[str, str]] = []
+
+    # Mock mode or missing credentials – return placeholder data
+    if os.getenv("MOCK_GOOGLE_APIS") == "true":
+        for i in range(min(count, len(messages))):
+            results.append(
+                {
+                    "subject": f"Mock email {i + 1}",
+                    "snippet": "This is a mock email snippet",
+                }
+            )
+        return results
+
+    try:
+        from googleapiclient.discovery import build
+        from google_utils.auth import get_credentials
+
+        creds = get_credentials(["https://www.googleapis.com/auth/gmail.readonly"])
+        service = build("gmail", "v1", credentials=creds)
+
+        for msg in messages[:count]:
+            detail = (
+                service.users()
+                .messages()
+                .get(userId="me", id=msg["id"], format="full")
+                .execute()
+            )
+            headers = detail.get("payload", {}).get("headers", [])
+            subject = next(
+                (h.get("value", "") for h in headers if h.get("name") == "Subject"),
+                "",
+            )
+            snippet = detail.get("snippet", "")
+            results.append({"subject": subject, "snippet": snippet})
+    except Exception as e:
+        print(f"[ERROR] smart_read_last_emails failed: {e}")
+
+    return results
+
 # 🔹 ROOT AGENT DEFINITION
-
-
 
 root_agent = Agent(
     name="manager",
-    model="gemini-2.0-flash",
-    description="Manager Orchestrator with multi-agent delegation and Gmail tools",
-    instruction="""You are the **Manager Orchestrator Agent**.
+    model="gemini-2.0-flash", 
+    description="Manager Orchestrator with multi-agent delegation + Gmail + Calendar tools",
+    instruction="""
+You are the **Manager Orchestrator Agent**.  
+You are responsible for:
+✅ Delegating queries to the correct sub-agents  
+✅ Handling multi-domain analytics  
+✅ Sending emails via Gmail (using smart_send_email)
+✅ Scheduling meetings in Google Calendar (using smart_schedule_event)
+✅ Reading recent emails (using smart_read_last_emails)
 
-- Delegate queries to the correct sub-agents.
-- Handle multi-domain analytics.
-- Send emails via Gmail using `smart_send_email`.
-- Meeting requests and calendar scheduling are not supported and should be ignored.
+---
 
-For analytics queries, delegate to the appropriate sub-agent and then call `capture_analytics_after_response(query, response)` to store results.
-Use `smart_send_email(query)` for email requests.
-""",
+🚨 **CRITICAL ANALYTICS WORKFLOW:**  
+For ANY analytics query, you MUST follow this exact process:
+
+1️⃣ **ALWAYS delegate to the appropriate sub-agent FIRST**
+2️⃣ **IMMEDIATELY after getting the response**, call `capture_analytics_after_response(query, response)`
+3️⃣ This ensures analytics data is captured for email functionality
+
+🔹 **Analytics Queries** (sales, financial, inventory, purchase):
+   → Delegate to appropriate agent → `capture_analytics_after_response(query, response)`
+
+
+
+🔹 **Calendar Queries** (schedule, meeting, event):
+   → Call `smart_schedule_event(query)`
+
+🔹 **Inbox Queries** (read, inbox, emails):
+   → Call `smart_read_last_emails(count)` (defaults to 3)
+
+🔹 **Greetings** (hello, hi):
+   → Delegate to `greeting_agent` (no analytics capture needed)
+
+---
+
+🚨 **EMAIL HANDLING:**  
+If the query contains:  
+- Keywords like "send", "email", "mail", "forward"  
+- OR includes an email address (e.g., user@example.com)  
+
+→ Call: `smart_send_email(query)`  
+
+This will automatically use the stored analytics data from previous queries.
+
+---
+
+🚨 **CALENDAR HANDLING:**  
+If the query includes:
+- "schedule", "meeting", "event", "calendar"
+
+→ Call: `smart_schedule_event(query)`
+
+---
+
+📌 **CRITICAL EXAMPLES:**  
+
+✔️ User: "Get sales summary" 
+   → Delegate to `sales_agent` 
+   → `capture_analytics_after_response("Get sales summary", sales_response)`
+
+✔️ User: "Send this to john@company.com"
+   → `smart_send_email("Send this to john@company.com")`
+   → (automatically uses previously captured analytics)
+
+✔️ User: "Hello"
+   → Delegate to `greeting_agent` (no capture needed)
+
+✔️ User: "Read my last 3 emails"
+   → `smart_read_last_emails(count=3)`
+
+---
+
+� **MANDATORY RULES:**
+1. **ALWAYS** call `capture_analytics_after_response()` after ANY analytics delegation
+2. **NEVER** skip analytics capture for sales/financial/inventory/purchase queries  
+3. Email function will FAIL if no analytics data was captured - this prevents blank emails
+4. **ALWAYS** delegate to the correct sub-agent based on query domain
+5. **NEVER** say "I cannot send emails" - use `smart_send_email()` tool
+
+---
+
+🎯 **FAIL-SAFE EMAIL BEHAVIOR:**
+If user requests email but no analytics was captured, the email function will return an error asking them to run analytics first. This prevents sending blank emails with default charts.
+
+"""
+,
+
     tools=[
         FunctionTool(capture_analytics_after_response),
         FunctionTool(get_analytics_and_store),
         FunctionTool(format_and_store_agent_response),
         FunctionTool(smart_send_email),
+        FunctionTool(smart_schedule_event),
+        FunctionTool(smart_read_last_emails),
+
+
     ],
     sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
 )
