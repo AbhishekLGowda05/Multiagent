@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 from google.adk.tools.function_tool import FunctionTool
-import os, sys, re, json, traceback, base64
+import os, sys, re, json, traceback, base64, random
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from typing import Any
@@ -1605,9 +1605,9 @@ def smart_schedule_event(query: str) -> dict:
         if is_recurring:
             # Use the new create_recurring_event function
             result = create_recurring_event(
-                meeting_title, 
-                start_iso, 
-                end_iso, 
+                meeting_title,
+                start_iso,
+                end_iso,
                 recurrence_rule,
                 description=f"Recurring meeting created from query: {query}"
             )
@@ -1616,12 +1616,46 @@ def smart_schedule_event(query: str) -> dict:
             # Use the standard create_event function
             result = create_event(meeting_title, start_iso, end_iso)
             print(f"[DEBUG] Created one-time event successfully")
-            
+
         return result
-        
+
     except Exception as e:
         print(f"[ERROR] Calendar event creation failed: {str(e)}")
         return {"status": "error", "message": f"Failed to create calendar event: {str(e)}"}
+
+
+def smart_generate_image(prompt: str) -> dict:
+    """Create a simple image or chart from a text prompt and return the file path."""
+    print(f"[DEBUG] ===== IMAGE GENERATION CALLED =====")
+    print(f"[DEBUG] Prompt: {prompt}")
+
+    filename = f"generated_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+    try:
+        lower_prompt = prompt.lower()
+
+        # If prompt suggests a chart/graph, make a simple bar chart
+        if any(word in lower_prompt for word in ["chart", "graph", "plot"]):
+            data = [random.randint(1, 10) for _ in range(5)]
+            plt.figure()
+            plt.bar(range(len(data)), data)
+            plt.title(prompt)
+        else:
+            # Otherwise create a DALL·E-style placeholder image with text
+            plt.figure(figsize=(4, 4))
+            plt.text(0.5, 0.5, prompt, ha="center", va="center", wrap=True)
+            plt.axis("off")
+
+        plt.savefig(filename, bbox_inches="tight")
+        plt.close()
+
+        file_path = os.path.abspath(filename)
+        print(f"[DEBUG] Image generated at: {file_path}")
+        return {"status": "success", "path": file_path}
+
+    except Exception as e:
+        print(f"[ERROR] Image generation failed: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 #  NEW: Custom Agent Wrapper with Query Preprocessing
@@ -1727,7 +1761,7 @@ base_manager_agent = Agent(
     description="Manager Orchestrator with multi-agent delegation + Gmail + Calendar tools",
 
     instruction="""
-You are the **manager agent** (root agent). You have Gmail + Calendar powers.
+You are the **manager agent** (root agent). You have Gmail + Calendar powers and can generate images or charts.
 
  CROSS-AGENT DETECTION:
 If the query involves:
@@ -1757,6 +1791,7 @@ If the query involves:
 
 Note: Email and calendar requests are handled by the preprocessor before reaching this agent.
 To view recent emails, call smart_read_last_emails(count=3) which returns the latest messages from your inbox.
+Use smart_generate_image(prompt) to create simple DALL·E-style images or graphs.
 """,
     tools=[
         FunctionTool(handle_cross_agent_query),
@@ -1764,6 +1799,8 @@ To view recent emails, call smart_read_last_emails(count=3) which returns the la
         FunctionTool(smart_send_email),
         FunctionTool(smart_delete_last_email),
         FunctionTool(smart_read_last_emails),
+        FunctionTool(smart_schedule_event),
+        FunctionTool(smart_generate_image),
         FunctionTool(format_and_store_agent_response),
     ],
     sub_agents=[],  # Empty to avoid parent conflicts - will be set manually
