@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Any
@@ -11,6 +12,13 @@ from google.adk.tools.function_tool import FunctionTool
 
 from .gmail_tools import send_email
 from .calendar_tools import create_event
+
+# Guard against unfinished YAML-based configurations
+for env_var in os.environ:
+    if "AGENT" in env_var and "YAML" in env_var:
+        raise RuntimeError(
+            f"YAML agent configuration via '{env_var}' is not supported; agents must be defined programmatically."
+        )
 
 
 # Wrapper functions exposed as tools
