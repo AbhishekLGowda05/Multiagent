@@ -46,8 +46,15 @@ def run_query(query: str):
         # pydantic 2.x
         print(result.model_dump_json(indent=2))
     except AttributeError:
-        # pydantic 1.x fallback
-        print(result.json(indent=2))
+        try:
+            # pydantic 1.x fallback
+            print(result.json(indent=2))
+        except AttributeError:
+            # Custom object fallback
+            print(f"Financial Result: {result}")
+            if hasattr(result, '__dict__'):
+                for key, value in result.__dict__.items():
+                    print(f"  {key}: {value}")
 
 
 if __name__ == "__main__":

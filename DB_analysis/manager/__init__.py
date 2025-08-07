@@ -1,5 +1,5 @@
 try:
-    from .agent import root_agent
+    from .agent import manager_agent as root_agent
 except Exception:  # pragma: no cover - optional dependency not available
     root_agent = None
 
