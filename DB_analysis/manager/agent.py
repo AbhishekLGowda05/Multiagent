@@ -1626,11 +1626,12 @@ def smart_schedule_event(query: str) -> dict:
 
 #  NEW: Custom Agent Wrapper with Query Preprocessing
 class ManagerAgentWithPreprocessor(Agent):
+
     """
     Wrapper around the standard Agent that intercepts queries before LLM processing.
     This ensures email/calendar requests are handled immediately without delegation.
     """
-    
+
     def __init__(self, base_agent: Agent):
         # Initialize the parent Agent class with base agent's properties but without sub_agents
         # to avoid "already has a parent agent" validation error
