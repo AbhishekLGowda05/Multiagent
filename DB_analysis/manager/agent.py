@@ -2,8 +2,13 @@ from google.adk.agents import Agent
 from google.adk.tools.function_tool import FunctionTool
 import os, sys, re, json
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+
+try:
+    import dateparser  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    dateparser = None
 
 # ✅ Add Int-Assignment root path so google_utils is discoverable
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -644,6 +649,36 @@ Currently no analytics data is stored in memory."""
 
     print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
     return {"status": "success", "recipients": recipients, "results": results}
+
+# 🔹 Schedule a meeting in Google Calendar
+def smart_schedule_event(query: str) -> dict:
+    """Schedule a calendar event based on a natural language query."""
+    print(f"[DEBUG] ===== CALENDAR FUNCTION CALLED =====")
+    print(f"[DEBUG] Query: {query}")
+
+    # Try to parse a start time from the query
+    start_time = None
+    if dateparser:
+        try:
+            start_time = dateparser.parse(query, settings={"PREFER_DATES_FROM": "future"})
+        except Exception:
+            start_time = None
+
+    if start_time is None:
+        start_time = datetime.utcnow() + timedelta(hours=1)
+    end_time = start_time + timedelta(hours=1)
+
+    # Basic title extraction
+    title_match = re.search(r"(?:schedule|create|add)\s+(?:a\s+|an\s+)?(.+?)(?:\s+on|\s+at|$)", query, re.I)
+    title = title_match.group(1).strip() if title_match else "Meeting"
+
+    try:
+        event = create_event(title, start_time, end_time, description=query)
+        print(f"[DEBUG] Event created: {event}")
+        return {"status": "success", "event": event}
+    except Exception as e:
+        print(f"[ERROR] Failed to schedule event: {e}")
+        return {"status": "error", "message": str(e)}
 
 # 🔹 NEW: Read recent emails from Gmail inbox
 def smart_read_last_emails(count: int = 3) -> list[dict[str, str]]:
