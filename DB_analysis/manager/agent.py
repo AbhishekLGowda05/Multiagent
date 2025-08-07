@@ -13,7 +13,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # ✅ Import Google utilities (now will work inside ADK)
-from google_utils.gmail_tools import send_email, read_emails
+from google_utils.gmail_tools import send_email, read_emails, delete_email
+
 from google_utils.calendar_tools import (
     create_event,
      create_recurring_event,
@@ -677,6 +678,25 @@ def smart_read_last_emails(count: int = 3) -> list[dict[str, str]]:
 
     return results
 
+# 🔹 Delete the last sent email
+
+def smart_delete_last_email() -> dict:
+    """Delete the most recent sent email by moving it to trash."""
+    print(f"[DEBUG] ===== DELETE LAST EMAIL CALLED =====")
+    try:
+        messages = read_emails(query="label:sent", maxResults=1)
+        if not messages:
+            print(f"[DEBUG] No sent emails found")
+            return {"status": "error", "message": "No sent emails found"}
+
+        message_id = messages[0].get("id")
+        delete_email(message_id)
+        print(f"[DEBUG] Deleted email id: {message_id}")
+        return {"status": "success", "message": f"Deleted email id: {message_id}"}
+    except Exception as e:
+        print(f"[ERROR] Failed to delete email: {e}")
+        return {"status": "error", "message": f"Failed to delete email: {e}"}
+
 # 🔹 ROOT AGENT DEFINITION
 
 root_agent = Agent(
@@ -686,11 +706,12 @@ root_agent = Agent(
     instruction="""
 You are the **Manager Orchestrator Agent**.  
 You are responsible for:
-✅ Delegating queries to the correct sub-agents  
-✅ Handling multi-domain analytics  
+✅ Delegating queries to the correct sub-agents
+✅ Handling multi-domain analytics
 ✅ Sending emails via Gmail (using smart_send_email)
 ✅ Scheduling meetings in Google Calendar (using smart_schedule_event)
-✅ Reading recent emails (using smart_read_last_emails)
+✅ Deleting the last sent email (using smart_delete_last_email)
+
 
 ---
 
@@ -706,6 +727,9 @@ For ANY analytics query, you MUST follow this exact process:
 
 
 
+🔹 **Delete Email Queries** (delete last sent mail):
+   → Call `smart_delete_last_email()`
+
 🔹 **Calendar Queries** (schedule, meeting, event):
    → Call `smart_schedule_event(query)`
 
@@ -718,13 +742,17 @@ For ANY analytics query, you MUST follow this exact process:
 ---
 
 🚨 **EMAIL HANDLING:**  
-If the query contains:  
-- Keywords like "send", "email", "mail", "forward"  
-- OR includes an email address (e.g., user@example.com)  
+If the query contains:
+- Keywords like "send", "email", "mail", "forward"
+- OR includes an email address (e.g., user@example.com)
 
-→ Call: `smart_send_email(query)`  
+→ Call: `smart_send_email(query)`
 
 This will automatically use the stored analytics data from previous queries.
+
+If the user asks to delete the most recent sent email:
+
+→ Call: `smart_delete_last_email()`
 
 ---
 
@@ -745,6 +773,9 @@ If the query includes:
 ✔️ User: "Send this to john@company.com"
    → `smart_send_email("Send this to john@company.com")`
    → (automatically uses previously captured analytics)
+
+✔️ User: "Delete the last sent mail"
+   → `smart_delete_last_email()`
 
 ✔️ User: "Hello"
    → Delegate to `greeting_agent` (no capture needed)
@@ -775,8 +806,7 @@ If user requests email but no analytics was captured, the email function will re
         FunctionTool(format_and_store_agent_response),
         FunctionTool(smart_send_email),
         FunctionTool(smart_schedule_event),
-        FunctionTool(smart_read_last_emails),
-
+        FunctionTool(smart_delete_last_email),
 
     ],
     sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],

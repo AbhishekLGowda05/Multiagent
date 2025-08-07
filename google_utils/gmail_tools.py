@@ -89,26 +89,33 @@ def send_email(
         raise e
 
 
-def read_emails(query: str | None = None) -> list[Any]:
-    """Return a list of messages matching the optional query."""
-    
+def read_emails(query: str | None = None, maxResults: int | None = None) -> list[Any]:
+    """Return a list of messages matching the optional query.
+
+    Parameters
+    ----------
+    query : str | None
+        Gmail search query.
+    maxResults : int | None
+        Maximum number of messages to return.
+    """
+
     # Check if running in mock mode or credentials are missing
     current_dir = os.path.dirname(os.path.abspath(__file__))
     credentials_path = os.path.join(current_dir, "credentials.json")
-    
+
     if os.getenv("MOCK_GOOGLE_APIS") == "true" or not os.path.exists(credentials_path):
-        print(f"[MOCK] 📧 Would read emails with query: {query}")
+        print(f"[MOCK] 📧 Would read emails with query: {query}, maxResults: {maxResults}")
         return [{"id": "mock_email_1", "threadId": "mock_thread_1"}]
 
     creds = _get_gmail_credentials()
     service = build("gmail", "v1", credentials=creds)
 
-    response = (
-        service.users()
-        .messages()
-        .list(userId="me", q=query or "")
-        .execute()
-    )
+    list_kwargs = {"userId": "me", "q": query or ""}
+    if maxResults is not None:
+        list_kwargs["maxResults"] = maxResults
+
+    response = service.users().messages().list(**list_kwargs).execute()
     return response.get("messages", [])
 
 
