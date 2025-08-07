@@ -47,9 +47,18 @@ def preprocess_query(query: str) -> tuple[str, bool]:
     """
     print(f"[PREPROCESSOR] ===== QUERY INTERCEPTOR =====")
     print(f"[PREPROCESSOR] Original query: {query}")
-    
+
     query_lower = query.lower().strip()
-    
+
+    # Check for analytics or cross-agent indicators
+    analytics_keywords = [
+        "analysis", "analytics", "report", "insight", "chart",
+        "graph", "compare", "comparison", "summary", "trend"
+    ]
+    has_analytics = is_cross_agent_query(query) or any(
+        keyword in query_lower for keyword in analytics_keywords
+    )
+
     # Email detection patterns
     email_patterns = [
         # Primary patterns
@@ -61,29 +70,33 @@ def preprocess_query(query: str) -> tuple[str, bool]:
         ("forward to" in query_lower),
         ("email this to" in query_lower)
     ]
-    
+
     is_email_request = any(email_patterns)
-    
+
     if is_email_request:
+        if has_analytics:
+            print(f"[PREPROCESSOR] Email contains analytics indicators; deferring to LLM")
+            return query, True
+
         print(f"[PREPROCESSOR]  EMAIL REQUEST DETECTED!")
         print(f"[PREPROCESSOR] Executing smart_send_email immediately...")
-        
+
         try:
             # Execute email function directly
             email_result = smart_send_email(query)
-            
+
             # Create response based on email result
             if email_result.get('status') == 'completed':
                 response = f" Email sent successfully to {email_result.get('recipients', 0)} recipient(s). Message ID: {email_result.get('results', [{}])[0].get('result', {}).get('id', 'unknown')}"
             else:
                 response = f" Email failed: {email_result.get('message', 'Unknown error')}"
-            
+
             print(f"[PREPROCESSOR] Email result: {email_result.get('status')}")
             print(f"[PREPROCESSOR] Returning direct response, bypassing LLM")
-            
+
             # Return the response and indicate NOT to continue to LLM
             return response, False
-            
+
         except Exception as e:
             print(f"[PREPROCESSOR] Email execution error: {e}")
             error_response = f" Email processing failed: {str(e)}"
