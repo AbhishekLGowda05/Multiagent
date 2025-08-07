@@ -183,7 +183,7 @@ User: "Schedule daily meeting from 7 PM to 8:47 PM in August"
 The Manager Agent has been transformed from a basic orchestrator to a **comprehensive enterprise-grade multi-agent system** with:
 
 - **Universal email capabilities** working across all agents
-- **Advanced calendar scheduling** with recurring event support  
+- **Meeting scheduling is no longer supported**
 - **Intelligent cross-agent query processing**
 - **Automatic JSON to readable text conversion**
 - **Robust error handling and user feedback**
