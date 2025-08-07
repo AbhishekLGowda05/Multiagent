@@ -5,6 +5,7 @@ Supports matplotlib-based visualizations for business analytics.
 
 import os
 import base64
+import logging
 from io import BytesIO
 from typing import List, Dict, Any, Optional
 import matplotlib.pyplot as plt
@@ -42,7 +43,13 @@ def generate_chart(
     
     if labels is None:
         labels = [f"Period {i+1}" for i in range(len(data))]
-    
+
+    if not data:
+        raise ValueError("Data cannot be empty.")
+
+    if len(data) != len(labels):
+        raise ValueError("Data and labels must be the same length.")
+
     plt.figure(figsize=figsize)
     
     if chart_type == "line":
@@ -65,10 +72,15 @@ def generate_chart(
     
     # Ensure directory exists
     os.makedirs(os.path.dirname(path) if os.path.dirname(path) else '.', exist_ok=True)
-    
-    plt.savefig(path, dpi=300, bbox_inches='tight')
+
+    try:
+        plt.savefig(path, dpi=300, bbox_inches='tight')
+    except Exception as e:
+        logging.exception("Failed to save chart at %s", path)
+        plt.close()
+        return f"Error saving chart: {e}"
     plt.close()
-    
+
     return path
 
 
@@ -110,17 +122,21 @@ def generate_chart_base64(
     plt.title(title, fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    
+
     # Save to BytesIO buffer
     buffer = BytesIO()
-    plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
-    buffer.seek(0)
-    
-    # Convert to base64
-    image_base64 = base64.b64encode(buffer.getvalue()).decode()
+    try:
+        plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
+        buffer.seek(0)
+        image_base64 = base64.b64encode(buffer.getvalue()).decode()
+    except Exception as e:
+        logging.exception("Failed to generate chart image")
+        plt.close()
+        buffer.close()
+        return f"Error generating chart image: {e}"
     plt.close()
     buffer.close()
-    
+
     return image_base64
 
 
@@ -176,11 +192,16 @@ def create_financial_dashboard(
     ax4.legend()
     ax4.grid(True, alpha=0.3)
     ax4.tick_params(axis='x', rotation=45)
-    
+
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    try:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    except Exception as e:
+        logging.exception("Failed to save financial dashboard to %s", output_path)
+        plt.close()
+        return f"Error saving chart: {e}"
     plt.close()
-    
+
     return output_path
 
 
@@ -225,9 +246,14 @@ def create_sales_chart(
     
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    try:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    except Exception as e:
+        logging.exception("Failed to save sales chart to %s", output_path)
+        plt.close()
+        return f"Error saving chart: {e}"
     plt.close()
-    
+
     return output_path
 
 
@@ -274,9 +300,14 @@ def create_inventory_chart(
     plt.xticks(rotation=45, ha='right')
     plt.grid(True, alpha=0.3, axis='y')
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    try:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    except Exception as e:
+        logging.exception("Failed to save inventory chart to %s", output_path)
+        plt.close()
+        return f"Error saving chart: {e}"
     plt.close()
-    
+
     return output_path
 
 
