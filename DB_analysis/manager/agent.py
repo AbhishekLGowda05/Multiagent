@@ -454,6 +454,22 @@ def capture_analytics_after_response(query: str, response: str) -> str:
     print(f"[DEBUG] ===== CAPTURE HOOK COMPLETED =====")
     return response
 
+
+# 🔹 NEW: Delegate queries and automatically store sub-agent responses
+def delegate_with_capture(query: str) -> dict:
+    """Delegate a query to sub-agents and store each response for email use."""
+    # Use the cross-agent orchestrator to route the query
+    responses = cross_orchestrator.handle_query(query)
+
+    # Iterate through each agent's tool output and store the latest text
+    for agent_name, agent_data in responses.items():
+        if agent_name.startswith("_"):
+            continue
+        for tool_result in agent_data.values():
+            format_and_store_agent_response(str(tool_result))
+
+    return responses
+
 # 🔹 FIXED: Email tool with proper pattern matching and enhanced debugging
 # Replace the smart_send_email function with this simplified version:
 
@@ -719,6 +735,7 @@ You are responsible for:
 For ANY analytics query, you MUST follow this exact process:
 
 1️⃣ **ALWAYS delegate to the appropriate sub-agent FIRST**
+   → Use `delegate_with_capture(query)` to auto-store responses
 2️⃣ **IMMEDIATELY after getting the response**, call `capture_analytics_after_response(query, response)`
 3️⃣ This ensures analytics data is captured for email functionality
 
@@ -801,6 +818,7 @@ If user requests email but no analytics was captured, the email function will re
 ,
 
     tools=[
+        FunctionTool(delegate_with_capture),
         FunctionTool(capture_analytics_after_response),
         FunctionTool(get_analytics_and_store),
         FunctionTool(format_and_store_agent_response),
