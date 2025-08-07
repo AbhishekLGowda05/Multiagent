@@ -1643,7 +1643,7 @@ class ManagerAgentWithPreprocessor(Agent):
             tools=base_agent.tools,
             sub_agents=[]  # Empty sub_agents to avoid parent conflict
         )
-        self.base_agent = base_agent
+        object.__setattr__(self, "_base_agent", base_agent)
     
     def run(self, query: str, **kwargs):
         """
@@ -1662,7 +1662,7 @@ class ManagerAgentWithPreprocessor(Agent):
         
         # Step 3: Otherwise, continue to the base agent (LLM processing)
         print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
-        return self.base_agent.run(processed_query, **kwargs)
+        return self._base_agent.run(processed_query, **kwargs)
     
     def run_async(self, query: str, **kwargs):
         """
@@ -1684,7 +1684,7 @@ class ManagerAgentWithPreprocessor(Agent):
         
         # Step 3: Otherwise, continue to the base agent (LLM processing)
         print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
-        return self.base_agent.run_async(processed_query, **kwargs)
+        return self._base_agent.run_async(processed_query, **kwargs)
     
     def delegate_to_sub_agent(self, agent_name: str, query: str):
         """Custom delegation method to handle manually assigned sub_agents."""
@@ -1696,8 +1696,8 @@ class ManagerAgentWithPreprocessor(Agent):
             'financial_agent': 4
         }
         
-        if agent_name in sub_agents_map and hasattr(self.base_agent, '_sub_agents'):
-            sub_agents = self.base_agent._sub_agents
+        if agent_name in sub_agents_map and hasattr(self._base_agent, '_sub_agents'):
+            sub_agents = self._base_agent._sub_agents
             agent_index = sub_agents_map[agent_name]
             if agent_index < len(sub_agents):
                 target_agent = sub_agents[agent_index]
@@ -1707,15 +1707,15 @@ class ManagerAgentWithPreprocessor(Agent):
         print(f"[MANAGER] Could not find sub-agent {agent_name}")
         return f"Could not delegate to {agent_name}"
     
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         """Delegate any other attributes to the base agent."""
-        return getattr(self.base_agent, name)
+        return getattr(self._base_agent, name)
 
     @property
     def sub_agents(self):
         """Access sub_agents from the base agent."""
         # Access the manually assigned sub_agents
-        return getattr(self.base_agent, '_sub_agents', [])
+        return getattr(self._base_agent, '_sub_agents', [])
 
 
 #  ROOT AGENT DEFINITION
