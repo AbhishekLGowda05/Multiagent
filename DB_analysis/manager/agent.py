@@ -46,106 +46,44 @@ cross_orchestrator = CrossAgentOrchestrator(DEFAULT_SPECS)
 LAST_ANALYTICS_RESULT: str = ""
 LAST_ANALYTICS_DATA: dict = {}
 
-#  NEW: Query Preprocessor - Intercepts emails BEFORE LLM processing
-def preprocess_query(query: str) -> tuple[str, bool]:
+#  NEW: Query Preprocessor - classifies query types without executing tools
+def preprocess_query(query: str) -> str:
     """
-    Preprocessor that intercepts email requests before they reach the LLM.
-    Returns (possibly_modified_query, should_continue_to_llm)
+    Lightweight preprocessor that identifies email or calendar requests.
+    Returns one of: "email", "calendar", or "normal".
     """
     print(f"[PREPROCESSOR] ===== QUERY INTERCEPTOR =====")
     print(f"[PREPROCESSOR] Original query: {query}")
 
     query_lower = query.lower().strip()
 
-    # Check for analytics or cross-agent indicators
-    analytics_keywords = [
-        "analysis", "analytics", "report", "insight", "chart",
-        "graph", "compare", "comparison", "summary", "trend"
-    ]
-    has_analytics = is_cross_agent_query(query) or any(
-        keyword in query_lower for keyword in analytics_keywords
-    )
-
     # Email detection patterns
     email_patterns = [
-        # Primary patterns
         ("send" in query_lower and ("mail" in query_lower or "email" in query_lower)),
-        # Email address pattern
         ("@" in query and re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', query)),
-        # Direct mail commands
         ("mail this to" in query_lower),
         ("forward to" in query_lower),
-        ("email this to" in query_lower)
+        ("email this to" in query_lower),
     ]
 
-    is_email_request = any(email_patterns)
+    if any(email_patterns):
+        print(f"[PREPROCESSOR] Email pattern detected")
+        return "email"
 
-    if is_email_request:
-        if has_analytics:
-            print(f"[PREPROCESSOR] Email contains analytics indicators; deferring to LLM")
-            return query, True
-
-        print(f"[PREPROCESSOR]  EMAIL REQUEST DETECTED!")
-        print(f"[PREPROCESSOR] Executing smart_send_email immediately...")
-
-        try:
-            # Execute email function directly
-            email_result = smart_send_email(query)
-
-            # Create response based on email result
-            if email_result.get('status') == 'completed':
-                response = f" Email sent successfully to {email_result.get('recipients', 0)} recipient(s). Message ID: {email_result.get('results', [{}])[0].get('result', {}).get('id', 'unknown')}"
-            else:
-                response = f" Email failed: {email_result.get('message', 'Unknown error')}"
-
-            print(f"[PREPROCESSOR] Email result: {email_result.get('status')}")
-            print(f"[PREPROCESSOR] Returning direct response, bypassing LLM")
-
-            # Return the response and indicate NOT to continue to LLM
-            return response, False
-
-        except Exception as e:
-            print(f"[PREPROCESSOR] Email execution error: {e}")
-            error_response = f" Email processing failed: {str(e)}"
-            return error_response, False
-    
     # Calendar detection patterns
     calendar_patterns = [
         ("schedule" in query_lower and ("meeting" in query_lower or "event" in query_lower)),
         ("create event" in query_lower),
         ("book meeting" in query_lower),
-        ("add to calendar" in query_lower)
+        ("add to calendar" in query_lower),
     ]
-    
-    is_calendar_request = any(calendar_patterns)
-    
-    if is_calendar_request:
-        print(f"[PREPROCESSOR]  CALENDAR REQUEST DETECTED!")
-        print(f"[PREPROCESSOR] Executing smart_schedule_event immediately...")
-        
-        try:
-            # Execute calendar function directly
-            calendar_result = smart_schedule_event(query)
-            
-            # Create response based on calendar result
-            if calendar_result.get('status') == 'success':
-                response = f" Calendar event created successfully: {calendar_result.get('message', 'Event scheduled')}"
-            else:
-                response = f" Calendar event failed: {calendar_result.get('message', 'Unknown error')}"
-            
-            print(f"[PREPROCESSOR] Calendar result: {calendar_result.get('status')}")
-            print(f"[PREPROCESSOR] Returning direct response, bypassing LLM")
-            
-            # Return the response and indicate NOT to continue to LLM
-            return response, False
-            
-        except Exception as e:
-            print(f"[PREPROCESSOR] Calendar execution error: {e}")
-            error_response = f" Calendar processing failed: {str(e)}"
-            return error_response, False
-    
-    print(f"[PREPROCESSOR] No email/calendar patterns detected, continuing to LLM")
-    return query, True
+
+    if any(calendar_patterns):
+        print(f"[PREPROCESSOR] Calendar pattern detected")
+        return "calendar"
+
+    print(f"[PREPROCESSOR] No special patterns detected")
+    return "normal"
 
 #  NEW: Format cross-agent results for display
 def format_cross_agent_result(result: dict, query: str) -> str:
@@ -1633,45 +1571,54 @@ class ManagerAgentWithPreprocessor(Agent):
         object.__setattr__(self, "_base_agent", base_agent)
     
     def run(self, query: str, **kwargs):
-        """
-        Override run method to include preprocessing.
-        """
+        """Route queries to the proper handler or sub-agent."""
         print(f"[MANAGER] ===== QUERY RECEIVED =====")
         print(f"[MANAGER] Query: {query}")
-        
-        # Step 1: Preprocess the query
-        processed_query, should_continue = preprocess_query(query)
-        
-        # Step 2: If preprocessor handled it, return the result directly
-        if not should_continue:
-            print(f"[MANAGER] Preprocessor handled the request directly")
-            return processed_query
-        
-        # Step 3: Otherwise, continue to the base agent (LLM processing)
-        print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
-        return self._base_agent.run(processed_query, **kwargs)
-    
-    def run_async(self, query: str, **kwargs):
-        """
-        Async version for compatibility with ADK agents.
-        """
-        print(f"[MANAGER] ===== ASYNC QUERY RECEIVED =====")
-        print(f"[MANAGER] Query: {query}")
-        
-        # Step 1: Preprocess the query
-        processed_query, should_continue = preprocess_query(query)
-        
-        # Step 2: If preprocessor handled it, return the result directly
-        if not should_continue:
-            print(f"[MANAGER] Preprocessor handled the request directly")
-            # For async, we need to return an async generator for processed queries too
-            async def _return_processed():
-                yield processed_query
-            return _return_processed()
-        
-        # Step 3: Otherwise, continue to the base agent (LLM processing)
-        print(f"[MANAGER] Continuing to LLM with query: {processed_query}")
-        return self._base_agent.run_async(processed_query, **kwargs)
+
+        # Step 1: Cross-agent detection
+        if is_cross_agent_query(query):
+            print(f"[MANAGER] Detected cross-agent query")
+            result = handle_cross_agent_query(query)
+            format_and_store_agent_response(result)
+            return result
+
+        # Step 2: Email/Calendar detection (requires prior analytics)
+        query_type = preprocess_query(query)
+        if LAST_ANALYTICS_RESULT:
+            if query_type == "email":
+                print(f"[MANAGER] Routing to smart_send_email")
+                return smart_send_email(query)
+            if query_type == "calendar":
+                print(f"[MANAGER] Routing to smart_schedule_event")
+                return smart_schedule_event(query)
+
+        # Step 3: Delegate to appropriate sub-agent
+        query_lower = query.lower()
+        if any(k in query_lower for k in ["sales", "invoice", "top customers"]):
+            agent_name = "sales_agent"
+        elif any(k in query_lower for k in ["purchase", "supplier", "vendor", "orders"]):
+            agent_name = "purchase_agent"
+        elif any(k in query_lower for k in ["stock", "inventory", "items", "restock"]):
+            agent_name = "inventory_agent"
+        elif any(k in query_lower for k in ["profit", "loss", "revenue", "balance", "income", "expenses"]):
+            agent_name = "financial_agent"
+        elif any(k in query_lower for k in ["hello", "hi", "introduce", "greetings"]):
+            agent_name = "greeting_agent"
+        else:
+            agent_name = "greeting_agent"
+
+        response = self.delegate_to_sub_agent(agent_name, query)
+        format_and_store_agent_response(response)
+        return response
+
+    async def run_async(self, query: str, **kwargs):
+        """Async wrapper around run for compatibility."""
+        result = self.run(query, **kwargs)
+
+        async def _async_gen():
+            yield result
+
+        return _async_gen()
     
     def delegate_to_sub_agent(self, agent_name: str, query: str):
         """Custom delegation method to handle manually assigned sub_agents."""
