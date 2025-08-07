@@ -20,7 +20,7 @@ for env_var in os.environ:
         )
 
 #  Import Google utilities (now will work inside ADK)
-from google_utils.gmail_tools import send_email
+from google_utils.gmail_tools import send_email, read_emails
 from google_utils.calendar_tools import (
     create_event,
      create_recurring_event,
@@ -1097,6 +1097,46 @@ def smart_send_email(query: str) -> dict:
         return {"status": "error", "message": f"Email function failed with error: {str(e)}", "error_type": str(type(e)), "suggestion": "Check Google API credentials and email configuration"}
 
 
+#  NEW: Email reading functionality
+def smart_read_last_emails(count: int = 3) -> dict:
+    """Return the latest `count` emails from the inbox."""
+    print(f"[DEBUG] ===== EMAIL READ FUNCTION CALLED =====")
+
+    try:
+        import os
+
+        credentials_path = "./google_utils/credentials.json"
+        if os.getenv("MOCK_GOOGLE_APIS") == "true":
+            print(f"[DEBUG] Mock mode enabled - retrieving mock emails")
+            emails = read_emails(query="in:inbox")
+            return {"status": "success", "emails": emails[:count], "mode": "mock"}
+
+        if not os.path.exists(credentials_path):
+            print(f"[ERROR] Credentials not found at {credentials_path}")
+            return {
+                "status": "error",
+                "message": f"Google API credentials not found at {credentials_path}",
+                "suggestion": "Please ensure credentials.json exists in the google_utils folder",
+            }
+
+        print(f"[DEBUG] Fetching inbox emails from Gmail...")
+        emails = read_emails(query="in:inbox")
+        print(f"[DEBUG] Retrieved {len(emails)} emails")
+
+        return {"status": "success", "emails": emails[:count], "mode": "real"}
+
+    except Exception as e:
+        print(f"[ERROR] Email read failed: {str(e)}")
+        import traceback
+        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
+        return {
+            "status": "error",
+            "message": f"Failed to read emails: {str(e)}",
+            "error_type": str(type(e)),
+            "suggestion": "Check Google API credentials and Gmail permissions",
+        }
+
+
 #  ENHANCED: Email deletion functionality with better error handling
 def smart_delete_last_email() -> dict:
     """Delete the last sent email from the user's account."""
@@ -1632,12 +1672,14 @@ If the query involves:
 3. Capture analytics responses with format_and_store_agent_response()
 
 Note: Email and calendar requests are handled by the preprocessor before reaching this agent.
+To view recent emails, call smart_read_last_emails(count=3) which returns the latest messages from your inbox.
 """,
     tools=[
         FunctionTool(handle_cross_agent_query),
         FunctionTool(is_cross_agent_query),
         FunctionTool(smart_send_email),
         FunctionTool(smart_delete_last_email),
+        FunctionTool(smart_read_last_emails),
         FunctionTool(format_and_store_agent_response),
     ],
     sub_agents=[greeting_agent, sales_agent, purchase_agent, inventory_agent, financial_agent],
@@ -1646,5 +1688,4 @@ Note: Email and calendar requests are handled by the preprocessor before reachin
 # ✅ Wrap it with preprocessor-aware manager
 root_agent = ManagerAgentWithPreprocessor(base_manager_agent)
 
-# Backwards compatibility: some tests expect `manager_agent`
 manager_agent = root_agent
