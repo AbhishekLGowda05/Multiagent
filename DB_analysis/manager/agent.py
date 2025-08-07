@@ -1625,19 +1625,22 @@ def smart_schedule_event(query: str) -> dict:
 
 
 #  NEW: Custom Agent Wrapper with Query Preprocessing
-class ManagerAgentWithPreprocessor:
+class ManagerAgentWithPreprocessor(Agent):
     """
     Wrapper around the standard Agent that intercepts queries before LLM processing.
     This ensures email/calendar requests are handled immediately without delegation.
     """
-    
+
     def __init__(self, base_agent: Agent):
+        super().__init__(
+            name=base_agent.name,
+            model=base_agent.model,
+            description=base_agent.description,
+            instruction=getattr(base_agent, "instruction", None),
+            tools=base_agent.tools,
+            sub_agents=base_agent.sub_agents,
+        )
         self.base_agent = base_agent
-        self.name = base_agent.name
-        self.model = base_agent.model
-        self.description = base_agent.description
-        self.tools = base_agent.tools
-        self.sub_agents = base_agent.sub_agents
     
     def run(self, query: str, **kwargs):
         """
