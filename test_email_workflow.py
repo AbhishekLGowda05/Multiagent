@@ -36,7 +36,7 @@ sys.modules.setdefault("pydantic", pydantic_module)
 sys.path.insert(0, os.path.abspath("DB_analysis"))
 
 # Import the manager agent functions
-from DB_analysis.manager.agent import auto_capture_delegation_response, format_and_store_agent_response
+from DB_analysis.manager.agent import format_and_store_agent_response
 from DB_analysis.manager.sub_agents.financial_agent.agent import get_financial_summary
 
 def test_financial_email_workflow():
@@ -52,7 +52,7 @@ def test_financial_email_workflow():
     print(f"✅ Financial data retrieved: {type(financial_result).__name__}")
     
     # Step 2: Test the auto_capture function
-    print("\n📥 Step 2: Testing auto_capture_delegation_response...")
+    print("\n📥 Step 2: Formatting and storing response...")
     
     # Create a mock response that looks like what financial_agent would return
     mock_response = f"""Here's your financial summary:
@@ -69,13 +69,10 @@ Top Expense Categories:
 Balance: ₹{financial_result.total_debit - financial_result.total_credit:,.2f}"""
     
     try:
-        # Test the auto_capture function
-        captured_result = auto_capture_delegation_response(
-            agent_response=mock_response,
-            original_query=financial_query
-        )
-        
-        print(f"✅ Auto-capture completed successfully")
+        # Format and store the response for analytics
+        captured_result = format_and_store_agent_response(mock_response)
+
+        print(f"✅ Response formatted and stored")
         print(f"📋 Returned response length: {len(captured_result)} characters")
         
         # Step 3: Check if data was stored for email

@@ -56,7 +56,7 @@ def test_individual_tools():
     # Test manager agent tools directly
     print("\n🔧 Testing Manager Agent Tools...")
     try:
-        from manager.agent import handle_cross_agent_query, is_cross_agent_query, auto_capture_delegation_response
+        from manager.agent import handle_cross_agent_query, is_cross_agent_query, format_and_store_agent_response
         
         # Test cross-agent detection
         is_cross = is_cross_agent_query("compare sales with profits")
@@ -67,10 +67,10 @@ def test_individual_tools():
         print(f"✅ Cross-agent handling: {len(str(result))} chars")
         print(f"   Preview: {str(result)[:200]}...")
         
-        # Test auto-capture (simulate delegation)
+        # Format and store the mock delegation response
         mock_response = "Sample sales data: Revenue $10000, Customers: 5"
-        captured = auto_capture_delegation_response("get sales", "sales_agent", mock_response)
-        print(f"✅ Auto-capture: {len(str(captured))} chars")
+        captured = format_and_store_agent_response(mock_response)
+        print(f"✅ Response stored: {len(str(captured))} chars")
         
     except Exception as e:
         print(f"❌ Manager tools error: {e}")
@@ -128,14 +128,14 @@ def demonstrate_complete_workflow():
         
         # Simulate single agent delegation
         from manager.sub_agents.sales_agent.agent import get_sales_summary
-        from manager.agent import auto_capture_delegation_response
+        from manager.agent import format_and_store_agent_response
         
         sales_result = get_sales_summary(query)
         print(f"4️⃣ Sales agent result: {type(sales_result)}")
         
-        # Capture the result
-        captured = auto_capture_delegation_response(query, "sales_agent", str(sales_result))
-        print(f"5️⃣ Result captured for email: {len(str(captured))} chars")
+        # Store the result for email
+        captured = format_and_store_agent_response(str(sales_result))
+        print(f"5️⃣ Result stored for email: {len(str(captured))} chars")
     
     print("\n✅ Workflow demonstration completed!")
 
