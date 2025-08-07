@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Test script to verify the manager agent loads correctly"""
 
+__test__ = False
+
 import sys
 import os
 
@@ -20,8 +22,8 @@ try:
     print(f"📋 Number of sub-agents: {len(root_agent.sub_agents)}")
     
     # Test function imports
-    from manager.agent import smart_send_email, auto_capture_delegation_response
-    print("✅ SUCCESS: Key functions imported successfully!")
+    from manager.agent import smart_send_email
+    print("✅ SUCCESS: Key function imported successfully!")
     
     # Test global variables
     from manager.agent import LAST_ANALYTICS_RESULT, LAST_ANALYTICS_DATA

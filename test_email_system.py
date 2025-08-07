@@ -88,7 +88,7 @@ Timestamp: 2024-12-19 10:30:45"""
         return False
 
 def test_auto_capture_system():
-    """Test the auto_capture_delegation_response system"""
+    """Test the analytics auto-capture system"""
     
     print("\n🔄 Testing Auto-Capture System")
     print("=" * 40)
@@ -146,7 +146,7 @@ if __name__ == "__main__":
         print("\n🎉 OVERALL RESULT: EMAIL SYSTEM SHOULD WORK!")
         print("📧 The workflow 'get financial summary' → 'send email' should succeed")
         print("\n💡 Key insight: The issue was that non-sales agents weren't")
-        print("   calling the auto_capture_delegation_response() function")
+        print("   calling the analytics capture function")
         print("   This has been fixed with the new wrapper function")
     else:
         print("\n💥 OVERALL RESULT: EMAIL SYSTEM HAS ISSUES")

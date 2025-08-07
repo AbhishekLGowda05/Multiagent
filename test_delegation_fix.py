@@ -109,8 +109,7 @@ def test_manager_tools():
         # Check for key tools
         required_functions = [
             'detect_and_handle_delegation',
-            'smart_send_email', 
-            'auto_capture_delegation_response'
+            'smart_send_email'
         ]
         
         # This is approximate since we can't easily get function names from FunctionTool

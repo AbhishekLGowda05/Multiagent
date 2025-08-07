@@ -49,7 +49,7 @@ def demonstrate_single_agent_delegation():
     
     from manager.sub_agents.sales_agent.agent import get_sales_summary
     from manager.sub_agents.financial_agent.agent import get_financial_summary
-    from manager.agent import auto_capture_delegation_response
+    from manager.agent import format_and_store_agent_response
     
     test_cases = [
         ("Sales Agent", get_sales_summary, "get me the sales summary"),
@@ -64,9 +64,9 @@ def demonstrate_single_agent_delegation():
         print(f"🔧 Tool result: {type(result).__name__}")
         print(f"📊 Data: {str(result)[:150]}...")
         
-        # Capture for email
-        captured = auto_capture_delegation_response(query, agent_name.lower().replace(" ", "_"), str(result))
-        print(f"✅ Captured for email: {len(str(captured))} chars")
+        # Store analytics for email
+        captured = format_and_store_agent_response(str(result))
+        print(f"✅ Response stored for email: {len(str(captured))} chars")
         
         time.sleep(1)
 

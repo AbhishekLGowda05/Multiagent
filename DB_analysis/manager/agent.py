@@ -865,83 +865,6 @@ Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
     print(f"[DEBUG] ===== FORMATTING COMPLETED =====")
     return response
 
-#  NEW: Auto-wrapper for delegation with analytics capture
-def auto_capture_delegation_response(original_query: str, sub_agent_name: str, sub_agent_response: str) -> str:
-    """
-    Wrapper function to automatically capture analytics after any sub-agent delegation.
-    This ensures no analytics queries are missed.
-    """
-    print(f"[DEBUG] ===== AUTO-CAPTURE DELEGATION WRAPPER =====")
-    print(f"[DEBUG] Original query: {original_query}")
-    print(f"[DEBUG] Sub-agent: {sub_agent_name}")
-    print(f"[DEBUG] Response preview: {str(sub_agent_response)[:200]}...")
-    
-    # Check if this was an analytics query
-    query_lower = original_query.lower()
-    is_analytics = any(keyword in query_lower for keyword in [
-        "financial", "profit", "revenue", "expense", "income", "summary",
-        "sales", "customer", "invoice", "report", "analysis",
-        "inventory", "stock", "item", "product",
-        "purchase", "vendor", "supplier", "drop", "trend"
-    ])
-    
-    analytics_agents = ["financial_agent", "sales_agent", "inventory_agent", "purchase_agent"]
-    is_analytics_agent = sub_agent_name in analytics_agents
-    
-    if is_analytics or is_analytics_agent:
-        print(f"[DEBUG]  Analytics delegation detected - auto-capturing response")
-        format_and_store_agent_response(sub_agent_response)
-        print(f"[DEBUG]  Auto-capture completed for {sub_agent_name}")
-    else:
-        print(f"[DEBUG] Non-analytics delegation - skipping capture")
-    
-    #  NEW: Automatic delegation detection and execution
-    response_lower = str(sub_agent_response).lower()
-    
-    # Delegation patterns from sub-agents
-    delegation_patterns = [
-        "this request involves sending an email or scheduling an event, which i cannot handle. delegating to the root agent",
-        "i'll delegate this email request to the manager agent who has email capabilities",
-        "delegating to the root agent",
-        "delegate to manager agent", 
-        "delegate to root agent"
-    ]
-    
-    # Check if sub-agent is delegating back to manager
-    is_delegation = any(pattern in response_lower for pattern in delegation_patterns)
-    
-    if is_delegation:
-        print(f"[DEBUG]  DELEGATION DETECTED from {sub_agent_name}!")
-        
-        # Email patterns in original query
-        email_patterns = ["send this mail to", "send email to", "email this to", "mail this to", "@"]
-        calendar_patterns = ["schedule meeting", "create event", "add to calendar", "book meeting"]
-        
-        is_email_request = any(pattern in original_query.lower() for pattern in email_patterns)
-        is_calendar_request = any(pattern in original_query.lower() for pattern in calendar_patterns)
-        
-        if is_email_request:
-            print(f"[DEBUG]  Email delegation detected - executing smart_send_email")
-            email_result = smart_send_email(original_query)
-            print(f"[DEBUG]  Email executed with result: {email_result}")
-            return f" Email delegation handled automatically. {email_result}"
-        elif is_calendar_request:
-            print(f"[DEBUG]  Calendar delegation detected - calendar functionality not implemented")
-            return f"Calendar functionality is not currently implemented. Delegation detected from {sub_agent_name}."
-        else:
-            # Try to detect email addresses in query
-            import re
-            if re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', original_query):
-                print(f"[DEBUG]  Email address found - executing smart_send_email")
-                email_result = smart_send_email(original_query)
-                print(f"[DEBUG]  Email executed with result: {email_result}")
-                return f" Email delegation handled automatically. {email_result}"
-            else:
-                print(f"[DEBUG]  Delegation detected but no clear email/calendar pattern")
-                return f"Delegation detected from {sub_agent_name} but unable to determine action type."
-    
-    print(f"[DEBUG] ===== AUTO-CAPTURE WRAPPER COMPLETED =====")
-    return sub_agent_response
 
 #  ENHANCED: Email tool with better debugging and manual analytics population
 
@@ -1732,7 +1655,9 @@ class ManagerAgentWithPreprocessor(Agent):
             if agent_index < len(sub_agents):
                 target_agent = sub_agents[agent_index]
                 print(f"[MANAGER] Delegating to {agent_name}")
-                return target_agent.run(query)
+                result = target_agent.run(query)
+                format_and_store_agent_response(str(result))
+                return result
         
         print(f"[MANAGER] Could not find sub-agent {agent_name}")
         return f"Could not delegate to {agent_name}"
