@@ -458,30 +458,38 @@ def smart_send_email(query: str) -> dict:
     print(f"[DEBUG] LAST_ANALYTICS_RESULT type: {type(LAST_ANALYTICS_RESULT)}")
     
     # Pattern 1: "send this to email@domain.com" or "mail this to email@domain.com"
-    pattern1 = re.search(r"(?:send|mail) (?:this|these results?) to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
-    
-    # Pattern 2: "send email to email@domain.com" 
-    pattern2 = re.search(r"send (?:an )?email to ([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
-    
+    pattern1 = re.search(r"(?:send|mail) (?:this|these|mail|email) to ([\w.+-@\s,]+)", query, re.I)
+
+    # Pattern 2: "send email to email@domain.com"
+    pattern2 = re.search(r"send (?:an )?email to ([\w.+-@\s,]+)", query, re.I)
+
     # Pattern 3: Just find any email address in the query
-    pattern3 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query)
-    
-    to_email = None
+    pattern3 = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", query, re.I)
+
+    email_text = None
     if pattern1:
-        to_email = pattern1.group(1)
+        email_text = pattern1.group(1)
         subject = "Business Analysis Results"
-        print(f"[DEBUG] Pattern 1 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 1 matched - Email text: {email_text}")
     elif pattern2:
-        to_email = pattern2.group(1)
+        email_text = pattern2.group(1)
         subject = "Business Report"
-        print(f"[DEBUG] Pattern 2 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 2 matched - Email text: {email_text}")
     elif pattern3:
-        to_email = pattern3.group(1)
+        email_text = query
         subject = "Analytics Report"
-        print(f"[DEBUG] Pattern 3 matched - Email: {to_email}")
+        print(f"[DEBUG] Pattern 3 matched - Using entire query")
     else:
         print(f"[DEBUG] No email pattern matched")
         return {"status": "error", "message": "No email address found in query"}
+
+    # Extract all email addresses, allowing comma or whitespace separation
+    email_pattern = r"[\w.+-]+@[\w.-]+\.\w+"
+    recipients = re.findall(email_pattern, email_text)
+    print(f"[DEBUG] Extracted {len(recipients)} recipient(s): {recipients}")
+
+    if not recipients:
+        return {"status": "error", "message": "No valid email addresses found"}
     
     # 🚨 FAIL-SAFE CHECK: Ensure we have analytics data before sending
     if not LAST_ANALYTICS_RESULT or len(LAST_ANALYTICS_RESULT.strip()) == 0:
@@ -599,15 +607,19 @@ Currently no analytics data is stored in memory."""
     print(f"[DEBUG] Sending email with {len(attachments)} attachment(s)...")
     print(f"[SUCCESS] Email contains real analytics data: {len(LAST_ANALYTICS_DATA)} data points")
 
-    try:
-        result = _send_email_html(to_email, subject, html_body, attachments)
-        print(f"[DEBUG] send_email result: {result}")
-        print(f"[SUCCESS] Email sent successfully with analytics data and charts")
-        print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
-        return result
-    except Exception as e:
-        print(f"[ERROR] Email sending failed: {str(e)}")
-        return {"status": "error", "message": f"Failed to send email: {str(e)}"}
+    results = []
+    for to_email in recipients:
+        try:
+            print(f"[DEBUG] Sending to {to_email}")
+            result = _send_email_html(to_email, subject, html_body, attachments)
+            results.append({"email": to_email, "result": result})
+            print(f"[SUCCESS] Email sent to {to_email}")
+        except Exception as e:
+            print(f"[ERROR] Email sending failed for {to_email}: {str(e)}")
+            results.append({"email": to_email, "error": str(e)})
+
+    print(f"[DEBUG] ===== EMAIL FUNCTION COMPLETED =====")
+    return {"status": "success", "recipients": recipients, "results": results}
 
 # 🔹 ROOT AGENT DEFINITION
 
