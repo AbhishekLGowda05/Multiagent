@@ -12,7 +12,7 @@ To enable email and calendar functionality, you need to set up Google API creden
 2. Click "Create Credentials" > "OAuth 2.0 Client IDs"
 3. Choose "Desktop application"
 4. Download the JSON file as `credentials.json`
-5. Place it in the project root directory: `/Applications/Projects/Int-Assignment/credentials.json`
+5. Place it in the `google_utils/` directory as `credentials.json`
 
 ## Step 3: Required Scopes
 The system needs these scopes:

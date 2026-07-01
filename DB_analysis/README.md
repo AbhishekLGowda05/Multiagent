@@ -200,10 +200,10 @@ The manager agent automatically routes queries to the most relevant specialist b
 
 This example uses the same virtual environment created in the root directory. Make sure you have:
 
-1. Activated the virtual environment from the root directory:
+1. Activated the virtual environment from the project root:
 ```bash
 # macOS/Linux:
-source ../.venv/bin/activate
+source .venv/bin/activate
 # Windows CMD:
 ..\.venv\Scripts\activate.bat
 # Windows PowerShell:
